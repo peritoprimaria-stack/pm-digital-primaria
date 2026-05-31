@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Digital — Educación Primaria</title>
+<meta name="theme-color" content="#1565C0">
+<link rel="manifest" href="manifest.json">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+<style>
+/* ── RESET & BASE ─────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1565C0;
+  --primary-dark:#0D47A1;
+  --primary-light:#42A5F5;
+  --accent:#1E88E5;
+  --bg:#F0F4F8;
+  --surface:#FFFFFF;
+  --text:#212121;
+  --text-light:#757575;
+  --border:#E0E0E0;
+  --success:#2E7D32;
+  --warning:#F57F17;
+  --danger:#C62828;
+  --radius:8px;
+  --shadow:0 2px 8px rgba(0,0,0,.12);
+  --sidebar:240px;
+}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit;font-size:14px}
+a{color:var(--primary);text-decoration:none}
+
+/* ── LOADING ──────────────────────────────────────────── */
+#loading{position:fixed;inset:0;background:var(--primary);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:#fff}
+#loading .spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:16px;opacity:.85}
+
+/* ── LOGIN ────────────────────────────────────────────── */
+#loginScreen{display:none;min-height:100vh;background:linear-gradient(135deg,var(--primary-dark),var(--primary));align-items:center;justify-content:center;padding:20px}
+.login-card{background:#fff;border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.2);text-align:center}
+.login-card .escudo{width:80px;height:80px;object-fit:contain;margin-bottom:16px;border-radius:50%;background:#f5f5f5;padding:8px}
+.login-card h1{font-size:22px;color:var(--primary);margin-bottom:4px}
+.login-card h2{font-size:14px;color:var(--text-light);font-weight:400;margin-bottom:28px}
+.login-card .school-name{font-size:13px;color:var(--text-light);margin-bottom:24px;padding:8px;background:#f5f8ff;border-radius:6px}
+.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;background:#fff;font-size:15px;font-weight:500;color:var(--text);transition:.2s}
+.btn-google:hover{background:#f5f8ff;border-color:var(--primary)}
+.btn-google img{width:22px}
+.login-error{color:var(--danger);font-size:13px;margin-top:12px;display:none}
+
+/* ── APP LAYOUT ───────────────────────────────────────── */
+#app{display:none;min-height:100vh}
+.layout{display:flex;min-height:100vh}
+
+/* ── SIDEBAR ──────────────────────────────────────────── */
+.sidebar{width:var(--sidebar);background:var(--primary-dark);color:#fff;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:.3s}
+.sidebar-header{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar-header .escudo-small{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);padding:4px;object-fit:contain;margin-bottom:8px}
+.sidebar-header .school{font-size:13px;font-weight:600;line-height:1.3}
+.sidebar-header .user-info{font-size:11px;opacity:.7;margin-top:4px}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 0}
+.nav-section{padding:6px 16px;font-size:10px;text-transform:uppercase;letter-spacing:1px;opacity:.5;margin-top:8px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;cursor:pointer;transition:.15s;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,.08)}
+.nav-item.active{background:rgba(255,255,255,.15);border-left-color:var(--primary-light)}
+.nav-item .icon{font-size:18px;width:22px;text-align:center}
+.nav-item .badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;padding:2px 6px;border-radius:10px}
+.sidebar-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.1)}
+.btn-logout{width:100%;padding:8px;background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:6px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-logout:hover{background:rgba(255,255,255,.2)}
+
+/* ── MAIN CONTENT ─────────────────────────────────────── */
+.main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:50}
+.topbar h2{font-size:18px;font-weight:600;color:var(--primary)}
+.topbar .topbar-right{display:flex;align-items:center;gap:12px}
+.topbar .ciclo-badge{background:var(--primary);color:#fff;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.page-content{padding:24px;flex:1}
+
+/* ── CARDS ────────────────────────────────────────────── */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+.card-title{font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:20px}
+.stat-card{background:var(--surface);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);text-align:center;border-top:3px solid var(--primary)}
+.stat-card .stat-num{font-size:32px;font-weight:700;color:var(--primary)}
+.stat-card .stat-label{font-size:12px;color:var(--text-light);margin-top:4px}
+.stat-card.warning{border-top-color:var(--warning)}
+.stat-card.warning .stat-num{color:var(--warning)}
+.stat-card.danger{border-top-color:var(--danger)}
+.stat-card.danger .stat-num{color:var(--danger)}
+
+/* ── BOTONES ──────────────────────────────────────────── */
+.btn{padding:8px 16px;border-radius:6px;border:none;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;transition:.15s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-success{background:var(--success);color:#fff}
+.btn-success:hover{background:#1B5E20}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#B71C1C}
+.btn-outline{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+.btn-outline:hover{background:#f5f8ff}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-lg{padding:12px 24px;font-size:15px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── FORMULARIOS ──────────────────────────────────────── */
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:var(--text-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.form-control{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;transition:.15s}
+.form-control:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(21,101,192,.1)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ── TABLA ────────────────────────────────────────────── */
+.table-container{overflow-x:auto}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{background:var(--primary);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap}
+.data-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tr:hover td{background:#f5f8ff}
+.data-table tr:last-child td{border-bottom:none}
+
+/* ── BADGES ───────────────────────────────────────────── */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-S,.badge-10,.badge-9,.badge-8,.badge-7{background:#E3F2FD;color:#1565C0}
+.badge-MB{background:#E8F5E9;color:#2E7D32}
+.badge-B{background:#E3F2FD;color:#1565C0}
+.badge-R,.badge-6,.badge-5,.badge-4{background:#FFEBEE;color:#C62828}
+.badge-D{background:#FFEBEE;color:#C62828}
+.badge-P{background:#E8F5E9;color:#2E7D32}
+.badge-A{background:#FFEBEE;color:#C62828}
+.badge-T{background:#FFF8E1;color:#F57F17}
+.badge-RA{background:#FFF3E0;color:#E65100}
+
+/* ── ASISTENCIA ───────────────────────────────────────── */
+.asist-grid{display:grid;gap:8px}
+.asist-row{display:grid;grid-template-columns:200px 1fr auto;align-items:center;gap:12px;padding:8px 12px;background:#f9f9f9;border-radius:6px;border:1px solid var(--border)}
+.asist-nombre{font-size:13px;font-weight:500}
+.asist-btns{display:flex;gap:6px}
+.asist-btn{padding:5px 10px;border-radius:4px;border:2px solid transparent;font-size:12px;font-weight:700;background:#fff}
+.asist-btn.P{border-color:var(--success);color:var(--success)}
+.asist-btn.P.active{background:var(--success);color:#fff}
+.asist-btn.A{border-color:var(--danger);color:var(--danger)}
+.asist-btn.A.active{background:var(--danger);color:#fff}
+.asist-btn.T{border-color:var(--warning);color:var(--warning)}
+.asist-btn.T.active{background:var(--warning);color:#fff}
+.asist-btn.RA{border-color:#E65100;color:#E65100}
+.asist-btn.RA.active{background:#E65100;color:#fff}
+.asist-obs{width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px}
+
+/* ── CALIFICACIONES ───────────────────────────────────── */
+.calif-table th,.calif-table td{padding:8px 6px;text-align:center;border:1px solid var(--border)}
+.calif-table th:first-child,.calif-table td:first-child{text-align:left;padding-left:12px}
+.calif-table thead tr:first-child th{background:var(--primary)}
+.calif-input{width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px;font-weight:600}
+.calif-input:focus{outline:none;border-color:var(--primary)}
+
+/* ── MODAL ────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-header h3{font-size:16px;font-weight:600;color:var(--primary)}
+.modal-close{background:none;border:none;font-size:20px;color:var(--text-light);cursor:pointer}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* ── ALERTAS ──────────────────────────────────────────── */
+.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.alert-info{background:#E3F2FD;color:#1565C0;border-left:4px solid var(--primary)}
+.alert-success{background:#E8F5E9;color:#2E7D32;border-left:4px solid var(--success)}
+.alert-warning{background:#FFF8E1;color:#F57F17;border-left:4px solid var(--warning)}
+.alert-danger{background:#FFEBEE;color:#C62828;border-left:4px solid var(--danger)}
+
+/* ── TOAST ────────────────────────────────────────────── */
+#toast{position:fixed;bottom:24px;right:24px;background:#323232;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;z-index:9999;display:none;align-items:center;gap:8px;box-shadow:var(--shadow);max-width:360px}
+#toast.show{display:flex;animation:slideUp .3s ease}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── FILTROS ──────────────────────────────────────────── */
+.filtros{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.filtros select{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff}
+
+/* ── PROGRESS BAR ─────────────────────────────────────── */
+.progress{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;width:100px}
+.progress-bar{height:100%;border-radius:4px;transition:.3s}
+.progress-bar.ok{background:var(--success)}
+.progress-bar.risk{background:var(--danger)}
+
+/* ── LEGAJO ───────────────────────────────────────────── */
+.legajo-card{border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;cursor:pointer;transition:.15s}
+.legajo-card:hover{border-color:var(--primary);background:#f5f8ff}
+.legajo-card .legajo-header{display:flex;justify-content:space-between;align-items:flex-start}
+.legajo-card .legajo-nombre{font-weight:600;font-size:14px}
+.legajo-card .legajo-meta{font-size:12px;color:var(--text-light);margin-top:4px}
+.estado-badge{padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.estado-Activo{background:#E8F5E9;color:#2E7D32}
+.estado-Cerrado{background:#ECEFF1;color:#546E7A}
+
+/* ── MENSAJES ─────────────────────────────────────────── */
+.msg-item{padding:12px;border-bottom:1px solid var(--border);cursor:pointer;transition:.15s}
+.msg-item:hover{background:#f5f8ff}
+.msg-item.unread{border-left:3px solid var(--primary);background:#f5f8ff}
+.msg-item .msg-asunto{font-weight:600;font-size:13px}
+.msg-item .msg-meta{font-size:11px;color:var(--text-light);margin-top:3px}
+
+/* ── RESPONSIVE ───────────────────────────────────────── */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .topbar{padding:0 12px}
+  .page-content{padding:12px}
+  .form-grid,.form-grid-3{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .asist-row{grid-template-columns:1fr;gap:6px}
+}
+.hamburger{display:none;background:none;border:none;font-size:22px;cursor:pointer;color:var(--primary)}
+@media(max-width:768px){.hamburger{display:block}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Cargando PM Digital...</p>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none;min-height:100vh;background:linear-gradient(135deg,#0D47A1,#1565C0);align-items:center;justify-content:center;padding:20px">
+  <div class="login-card">
+    <div style="width:72px;height:72px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px">🏫</div>
+    <h1>PM Digital</h1>
+    <h2>Sistema de Gestión Escolar</h2>
+    <div class="school-name" id="loginSchoolName">Educación Primaria</div>
+    <button class="btn-google" onclick="loginGoogle()">
+      <svg width="22" height="22" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Ingresar con Google
+    </button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div style="font-size:28px;margin-bottom:6px">🏫</div>
+      <div class="school" id="sidebarSchool">PM Digital Primaria</div>
+      <div class="user-info" id="sidebarUser">—</div>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav">
+      <!-- Se genera dinámicamente según el rol -->
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="logout()">⬅ Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h2 id="pageTitle">Dashboard</h2>
+      </div>
+      <div class="topbar-right">
+        <span class="ciclo-badge" id="cicloBadge">2025</span>
+        <span id="topbarUser" style="font-size:13px;color:var(--text-light)"></span>
+      </div>
+    </div>
+    <div class="page-content" id="pageContent">
+      <!-- Contenido dinámico -->
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="modal-close" onclick="cerrarModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ════════════════════════════════════════════════════════════
+
+// ⚠️ REEMPLAZAR con los datos de tu proyecto Firebase
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBM0HfdM0E4NuHmP6l3V1GwSkuRpzBv3gM",
+  authDomain:        "primaria-digital.firebaseapp.com",
+  projectId:         "primaria-digital",
+  storageBucket:     "primaria-digital.firebasestorage.app",
+  messagingSenderId: "76246272878",
+  appId:             "1:76246272878:web:8822f4424cbbf194708f7f"
+};
+
+// ⚠️ REEMPLAZAR con la URL del Web App después de publicar el code.gs
+var BACKEND_URL = "https://script.google.com/macros/s/AKfycbwUNUY_PAKwPUQ_Ps2FZwjU7raXxPCSE17FQeRKBTWfcEelmvE6n9u5f-rcMCuRcy7yJA/exec";
+
+// ════════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ════════════════════════════════════════════════════════════
+var APP = {
+  usuario: null,
+  config: {},
+  cicloLectivo: "2025",
+  paginaActual: "",
+  cache: {}
+};
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+firebase.initializeApp(FIREBASE_CONFIG);
+
+firebase.auth().onAuthStateChanged(function(user) {
+  if (user) {
+    verificarUsuarioBackend(user.email);
+  } else {
+    mostrarLogin();
+  }
+});
+
+function verificarUsuarioBackend(email) {
+  mostrarLoading(true);
+  callBackend("verificarUsuario", {email: email}, function(res) {
+    if (res.ok) {
+      APP.usuario = res.data;
+      cargarConfig(function() {
+        mostrarApp();
+      });
+    } else {
+      firebase.auth().signOut();
+      mostrarLogin();
+      mostrarError("Tu cuenta no tiene acceso al sistema. Contactá al director.");
+    }
+  });
+}
+
+function cargarConfig(cb) {
+  callBackend("getConfig", {}, function(res) {
+    if (res.ok) {
+      APP.config = res.data;
+      APP.cicloLectivo = res.data.CICLO_LECTIVO || "2025";
+    }
+    if (cb) cb();
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════
+function loginGoogle() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(function(err) {
+    document.getElementById("loginError").style.display = "block";
+    document.getElementById("loginError").textContent = "Error al ingresar: " + err.message;
+  });
+}
+
+function logout() {
+  firebase.auth().signOut().then(function() {
+    APP.usuario = null;
+    mostrarLogin();
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// NAVEGACIÓN UI
+// ════════════════════════════════════════════════════════════
+function mostrarLoading(show) {
+  document.getElementById("loading").style.display = show ? "flex" : "none";
+}
+
+function mostrarLogin() {
+  mostrarLoading(false);
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("app").style.display = "none";
+}
+
+function mostrarApp() {
+  mostrarLoading(false);
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+
+  // Config UI
+  var escuela = APP.config.NOMBRE_ESCUELA || "PM Digital Primaria";
+  document.getElementById("sidebarSchool").textContent = escuela;
+  document.getElementById("loginSchoolName").textContent = escuela;
+  document.getElementById("cicloBadge").textContent = APP.cicloLectivo;
+
+  var u = APP.usuario;
+  document.getElementById("sidebarUser").textContent = u.nombre + " " + u.apellido + " (" + u.rol + ")";
+  document.getElementById("topbarUser").textContent = u.nombre + " " + u.apellido;
+
+  // CSS colors
+  var c = APP.config.COLOR_PRIMARIO || "#1565C0";
+  document.documentElement.style.setProperty("--primary", c);
+
+  construirMenu();
+  navegarA("dashboard");
+}
+
+function construirMenu() {
+  var rol = APP.usuario.rol;
+  var nav = document.getElementById("sidebarNav");
+  nav.innerHTML = "";
+
+  var items = [
+    {id:"dashboard", icon:"📊", label:"Dashboard", roles:["director","vicedirector","secretario","maestro","eoe"]},
+    {section:"Gestión", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"asistencia", icon:"📋", label:"Asistencia", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"calificaciones", icon:"📝", label:"Calificaciones", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"alumnos", icon:"👨‍🎓", label:"Alumnos", roles:["director","vicedirector","secretario","maestro"]},
+    {section:"Informes", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario"]},
+    {section:"EOE", roles:["director","vicedirector","secretario","eoe"]},
+    {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe"]},
+    {section:"Comunicación", roles:["director","vicedirector","secretario","maestro","eoe"]},
+    {id:"mensajes", icon:"✉️", label:"Mensajes", roles:["director","vicedirector","secretario","maestro","eoe"]},
+    {section:"Administración", roles:["director","vicedirector","secretario"]},
+    {id:"usuarios", icon:"👥", label:"Usuarios", roles:["director","vicedirector","secretario"]},
+    {id:"configuracion", icon:"⚙️", label:"Configuración", roles:["director"]},
+  ];
+
+  items.forEach(function(item) {
+    if (!item.roles.includes(rol)) return;
+    if (item.section) {
+      var el = document.createElement("div");
+      el.className = "nav-section";
+      el.textContent = item.section;
+      nav.appendChild(el);
+    } else {
+      var el = document.createElement("div");
+      el.className = "nav-item";
+      el.id = "nav-" + item.id;
+      el.innerHTML = '<span class="icon">' + item.icon + '</span>' + item.label;
+      el.onclick = function() { navegarA(item.id); };
+      nav.appendChild(el);
+    }
+  });
+}
+
+function navegarA(pagina) {
+  APP.paginaActual = pagina;
+  document.querySelectorAll(".nav-item").forEach(function(el) {
+    el.classList.remove("active");
+  });
+  var navEl = document.getElementById("nav-" + pagina);
+  if (navEl) navEl.classList.add("active");
+
+  var titulos = {
+    dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
+    alumnos:"Alumnos", boletin:"Boletines", ausencias_docentes:"Ausencias Docentes",
+    legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios", configuracion:"Configuración"
+  };
+  document.getElementById("pageTitle").textContent = titulos[pagina] || pagina;
+
+  var paginas = {
+    dashboard: renderDashboard,
+    asistencia: renderAsistencia,
+    calificaciones: renderCalificaciones,
+    alumnos: renderAlumnos,
+    boletin: renderBoletin,
+    ausencias_docentes: renderAusenciasDocentes,
+    legajos: renderLegajos,
+    mensajes: renderMensajes,
+    usuarios: renderUsuarios,
+    configuracion: renderConfiguracion
+  };
+
+  if (paginas[pagina]) paginas[pagina]();
+  toggleSidebar(false);
+}
+
+function toggleSidebar(force) {
+  var s = document.getElementById("sidebar");
+  if (force === false) { s.classList.remove("open"); return; }
+  s.classList.toggle("open");
+}
+
+// ════════════════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════════════════
+function renderDashboard() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = '<div class="stat-grid" id="statsGrid"><div style="text-align:center;padding:20px;color:var(--text-light)">Cargando estadísticas...</div></div><div id="dashAlerts"></div>';
+
+  var rol = APP.usuario.rol;
+
+  if (rol === "maestro") {
+    // Dashboard del maestro: su grado/sección
+    callBackend("getAlumnos", {grado: APP.usuario.grado, seccion: APP.usuario.seccion}, function(res) {
+      var total = res.ok ? res.data.length : 0;
+      callBackend("getAlertasAsistencia", {grado: APP.usuario.grado, seccion: APP.usuario.seccion}, function(resA) {
+        var alertas = resA.ok ? resA.data.length : 0;
+        document.getElementById("statsGrid").innerHTML =
+          statCard("👨‍🎓", total, APP.usuario.grado + "° " + APP.usuario.seccion + " — Alumnos", "") +
+          statCard("⚠️", alertas, "Riesgo asistencia", alertas > 0 ? "danger" : "") +
+          statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "");
+        if (alertas > 0) {
+          document.getElementById("dashAlerts").innerHTML =
+            '<div class="card"><div class="card-title">⚠️ Alertas de Asistencia</div>' +
+            resA.data.map(function(a) {
+              return '<div class="alert alert-warning">'+a.apellido_nombre+' — '+a.porcentaje+'% asistencia</div>';
+            }).join("") + '</div>';
+        }
+      });
+    });
+  } else {
+    callBackend("getEstadisticas", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+      if (!res.ok) { document.getElementById("statsGrid").innerHTML = "<p>Error cargando stats</p>"; return; }
+      var data = res.data;
+      var totalAlumnos = data.reduce(function(s,d){return s+d.total_alumnos},0);
+      var totalSecciones = data.length;
+      document.getElementById("statsGrid").innerHTML =
+        statCard("👨‍🎓", totalAlumnos, "Alumnos", "") +
+        statCard("🏫", totalSecciones, "Secciones activas", "") +
+        statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "") +
+        statCard("📊", data.length > 0 ? Math.round(data.reduce(function(s,d){return s+d.promedio_asistencia_pct},0)/data.length) + "%" : "—", "Asistencia promedio", "");
+
+      // Tabla resumen por grado/sección
+      var tabla = '<div class="card"><div class="card-title">📊 Resumen por Sección</div><div class="table-container"><table class="data-table"><thead><tr><th>Grado</th><th>Sección</th><th>Alumnos</th><th>Asistencia</th></tr></thead><tbody>';
+      data.forEach(function(d) {
+        var pct = d.promedio_asistencia_pct;
+        var color = pct >= 80 ? "var(--success)" : "var(--danger)";
+        tabla += '<tr><td>' + d.grado + '°</td><td>' + d.seccion + '</td><td>' + d.total_alumnos + '</td>' +
+          '<td><div style="display:flex;align-items:center;gap:8px"><div class="progress"><div class="progress-bar '+(pct>=80?'ok':'risk')+'" style="width:'+pct+'%"></div></div><span style="color:'+color+';font-weight:600">'+pct+'%</span></div></td></tr>';
+      });
+      tabla += "</tbody></table></div></div>";
+      document.getElementById("dashAlerts").innerHTML = tabla;
+    });
+  }
+}
+
+function statCard(icon, num, label, tipo) {
+  return '<div class="stat-card '+(tipo||'')+'"><div style="font-size:28px">'+icon+'</div><div class="stat-num">'+num+'</div><div class="stat-label">'+label+'</div></div>';
+}
+
+// ════════════════════════════════════════════════════════════
+// ASISTENCIA
+// ════════════════════════════════════════════════════════════
+function renderAsistencia() {
+  var pc = document.getElementById("pageContent");
+  var hoy = fechaHoy();
+  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var grado = APP.usuario.rol === "maestro" ? APP.usuario.grado : "";
+  var seccion = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "";
+
+  pc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📋 Tomar Asistencia</div>
+    <div class="filtros">
+      <input type="date" id="asistFecha" class="form-control" style="width:180px" value="${hoy}">
+      ${esAdmin ? `
+      <select id="asistGrado" class="form-control" style="width:100px" onchange="cargarSeccionesAsist()">
+        <option value="">Grado</option>
+        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'"'+(grado==g?' selected':'')+'>'+g+'°</option>').join('')}
+      </select>
+      <select id="asistSeccion" class="form-control" style="width:100px">
+        <option value="">Sección</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+      </select>` : `<input type="hidden" id="asistGrado" value="${grado}"><input type="hidden" id="asistSeccion" value="${seccion}">
+      <span class="badge badge-P" style="font-size:13px">${grado}° ${seccion}</span>`}
+      <button class="btn btn-primary" onclick="cargarListaAsistencia()">📋 Cargar lista</button>
+    </div>
+    <div id="asistLista"></div>
+    <div id="asistAcciones" style="display:none;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-success btn-lg" onclick="guardarAsistencia()">💾 Guardar asistencia</button>
+      <button class="btn btn-outline" onclick="marcarTodos('P')">✅ Todos presentes</button>
+      <button class="btn btn-outline" onclick="marcarTodos('A')">❌ Todos ausentes</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📊 Resumen del mes</div>
+    <div id="resumenAsist">
+      <p style="color:var(--text-light);font-size:13px">Seleccioná grado y sección para ver el resumen.</p>
+    </div>
+  </div>`;
+
+  if (APP.usuario.rol === "maestro") {
+    cargarListaAsistencia();
+    cargarResumenAsistencia();
+  }
+}
+
+var asistenciaActual = [];
+
+function cargarListaAsistencia() {
+  var fecha   = document.getElementById("asistFecha").value;
+  var grado   = document.getElementById("asistGrado").value;
+  var seccion = document.getElementById("asistSeccion").value;
+  if (!grado || !seccion) { toast("Seleccioná grado y sección"); return; }
+
+  document.getElementById("asistLista").innerHTML = '<p style="color:var(--text-light);font-size:13px">Cargando...</p>';
+
+  // Cargar alumnos
+  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(resA) {
+    if (!resA.ok || resA.data.length === 0) {
+      document.getElementById("asistLista").innerHTML = '<div class="alert alert-info">No hay alumnos registrados para este grado/sección.</div>';
+      return;
+    }
+    // Cargar asistencia existente para esa fecha
+    callBackend("getAsistencia", {fecha: fecha, grado: grado, seccion: seccion}, function(resR) {
+      var registros = {};
+      if (resR.ok) {
+        resR.data.forEach(function(r) { registros[r.id_alumno] = r; });
+      }
+      asistenciaActual = resA.data.map(function(al) {
+        var reg = registros[al.id_alumno];
+        return {
+          id_alumno: al.id_alumno,
+          apellido_nombre: al.apellido + ", " + al.nombre,
+          grado: grado,
+          seccion: seccion,
+          estado: reg ? reg.estado : "P",
+          observacion: reg ? reg.observacion : ""
+        };
+      });
+      renderListaAsistencia();
+      document.getElementById("asistAcciones").style.display = "flex";
+    });
+  });
+}
+
+function renderListaAsistencia() {
+  var html = '<div class="asist-grid">';
+  asistenciaActual.forEach(function(al, idx) {
+    html += `<div class="asist-row">
+      <div class="asist-nombre">${al.apellido_nombre}</div>
+      <div class="asist-btns">
+        ${["P","A","T","RA"].map(function(e){
+          return '<button class="asist-btn '+e+(al.estado===e?' active':'')+'" onclick="setEstado('+idx+',(this),\''+e+'\')">'+e+'</button>';
+        }).join("")}
+      </div>
+      <input class="asist-obs" placeholder="Observación" value="${al.observacion||''}" oninput="setObs(${idx},this.value)">
+    </div>`;
+  });
+  html += "</div>";
+  document.getElementById("asistLista").innerHTML = html;
+}
+
+function setEstado(idx, btn, estado) {
+  asistenciaActual[idx].estado = estado;
+  var row = btn.closest(".asist-row");
+  row.querySelectorAll(".asist-btn").forEach(function(b){ b.classList.remove("active"); });
+  btn.classList.add("active");
+}
+function setObs(idx, val) { asistenciaActual[idx].observacion = val; }
+function marcarTodos(estado) {
+  asistenciaActual.forEach(function(a){ a.estado = estado; });
+  renderListaAsistencia();
+}
+
+function guardarAsistencia() {
+  if (asistenciaActual.length === 0) { toast("Cargá la lista primero"); return; }
+  var fecha   = document.getElementById("asistFecha").value;
+  var grado   = document.getElementById("asistGrado").value;
+  var seccion = document.getElementById("asistSeccion").value;
+  callBackend("guardarAsistencia", {fecha: fecha, registros: asistenciaActual}, function(res) {
+    if (res.ok) {
+      toast("✅ Asistencia guardada — " + res.data.registros + " registros");
+      cargarResumenAsistencia();
+    } else {
+      toast("❌ Error: " + res.error);
+    }
+  });
+}
+
+function cargarResumenAsistencia() {
+  var grado = document.getElementById("asistGrado") ? document.getElementById("asistGrado").value : APP.usuario.grado;
+  var seccion = document.getElementById("asistSeccion") ? document.getElementById("asistSeccion").value : APP.usuario.seccion;
+  if (!grado || !seccion) return;
+  callBackend("getResumenAsistencia", {grado: String(grado), seccion: seccion}, function(res) {
+    if (!res.ok || res.data.length === 0) {
+      document.getElementById("resumenAsist").innerHTML = '<p style="color:var(--text-light);font-size:13px">Sin datos de asistencia aún.</p>';
+      return;
+    }
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Alumno/a</th><th>Presentes</th><th>Ausentes</th><th>Tardes</th><th>Retiros</th><th>Asistencia</th><th>Estado</th></tr></thead><tbody>';
+    res.data.forEach(function(a) {
+      var color = a.en_riesgo ? "var(--danger)" : "var(--success)";
+      html += '<tr>'
+        +'<td>'+a.apellido_nombre+'</td>'
+        +'<td style="text-align:center">'+a.presentes+'</td>'
+        +'<td style="text-align:center;color:var(--danger)">'+a.ausentes+'</td>'
+        +'<td style="text-align:center;color:var(--warning)">'+a.tardes+'</td>'
+        +'<td style="text-align:center">'+a.retiros+'</td>'
+        +'<td><div style="display:flex;align-items:center;gap:6px"><div class="progress"><div class="progress-bar '+(a.en_riesgo?'risk':'ok')+'" style="width:'+a.porcentaje+'%"></div></div><span style="color:'+color+';font-weight:600">'+a.porcentaje+'%</span></div></td>'
+        +'<td>'+(a.en_riesgo?'<span class="badge badge-A">⚠ Riesgo</span>':'<span class="badge badge-P">OK</span>')+'</td>'
+        +'</tr>';
+    });
+    html += "</tbody></table></div>";
+    document.getElementById("resumenAsist").innerHTML = html;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CALIFICACIONES
+// ════════════════════════════════════════════════════════════
+function renderCalificaciones() {
+  var pc = document.getElementById("pageContent");
+  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var grado = APP.usuario.rol === "maestro" ? String(APP.usuario.grado) : "1";
+  var seccion = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "A";
+
+  pc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📝 Carga de Calificaciones</div>
+    <div class="filtros">
+      ${esAdmin ? `
+      <select id="califGrado" class="form-control" style="width:100px" onchange="cargarCalificaciones()">
+        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'"'+(g==1?' selected':'')+'>'+g+'°</option>').join('')}
+      </select>
+      <select id="califSeccion" class="form-control" style="width:100px" onchange="cargarCalificaciones()">
+        <option value="A">A</option><option value="B">B</option>
+      </select>` : `
+      <input type="hidden" id="califGrado" value="${grado}">
+      <input type="hidden" id="califSeccion" value="${seccion}">
+      <span class="badge badge-P" style="font-size:13px">${grado}° ${seccion}</span>`}
+      <select id="califPeriodo" class="form-control" style="width:160px" onchange="cargarCalificaciones()">
+        <option value="informe_1">1° Informe</option>
+        <option value="informe_2">2° Informe</option>
+        <option value="informe_3">3° Informe</option>
+        <option value="periodo_extendido">Per. Extendido</option>
+        <option value="informe_final">Informe Final</option>
+      </select>
+    </div>
+    <div id="califTabla">
+      <p style="color:var(--text-light);font-size:13px;padding:12px">Seleccioná grado y período para cargar.</p>
+    </div>
+    <div id="califAcciones" style="margin-top:12px;display:none">
+      <button class="btn btn-success btn-lg" onclick="guardarCalificacionesBloque()">💾 Guardar todo</button>
+      <span id="califStatus" style="margin-left:12px;font-size:13px;color:var(--text-light)"></span>
+    </div>
+  </div>`;
+
+  cargarCalificaciones();
+}
+
+var califData = {};
+var califAlumnos = [];
+
+function cargarCalificaciones() {
+  var grado   = document.getElementById("califGrado").value;
+  var seccion = document.getElementById("califSeccion").value;
+  var periodo = document.getElementById("califPeriodo").value;
+  if (!grado || !seccion) return;
+
+  var esPrimerCiclo = parseInt(grado) <= 3;
+  var areas = esPrimerCiclo
+    ? ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"]
+    : ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA","INGLES"];
+  var escala = esPrimerCiclo ? ["D","R","B","MB","S"] : ["4","5","6","7","8","9","10"];
+  var nombres = {
+    PRACTICAS_LENGUAJE:"Prácticas del Lenguaje",MATEMATICA:"Matemática",
+    CIENCIAS_SOCIALES:"Ciencias Sociales",CIENCIAS_NATURALES:"Ciencias Naturales",
+    ED_ARTISTICA:"Educación Artística",ED_FISICA:"Educación Física",INGLES:"Inglés"
+  };
+
+  document.getElementById("califTabla").innerHTML = '<p style="color:var(--text-light);font-size:13px;padding:12px">Cargando...</p>';
+
+  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(resAl) {
+    if (!resAl.ok || resAl.data.length === 0) {
+      document.getElementById("califTabla").innerHTML = '<div class="alert alert-info">No hay alumnos para este grado/sección.</div>';
+      return;
+    }
+    califAlumnos = resAl.data;
+
+    callBackend("getCalificaciones", {grado: grado, seccion: seccion, ciclo_lectivo: APP.cicloLectivo}, function(resC) {
+      califData = {};
+      if (resC.ok) {
+        resC.data.forEach(function(c) {
+          if (!califData[c.id_alumno]) califData[c.id_alumno] = {};
+          califData[c.id_alumno][c.area] = c;
+        });
+      }
+
+      var escalaOpts = escala.map(function(e){ return '<option value="'+e+'">'+e+'</option>'; }).join("");
+      var aprobados = esPrimerCiclo ? ["B","MB","S"] : ["7","8","9","10"];
+
+      var html = '<div class="table-container"><table class="data-table calif-table"><thead>'
+        +'<tr><th rowspan="2" style="min-width:160px">Alumno/a</th>'
+        + areas.map(function(a){ return '<th>'+nombres[a]+'</th>'; }).join("") +'</tr>'
+        +'</thead><tbody>';
+
+      califAlumnos.forEach(function(al) {
+        html += '<tr><td style="font-weight:500">' + al.apellido + ', ' + al.nombre + '</td>';
+        areas.forEach(function(area) {
+          var val = (califData[al.id_alumno] && califData[al.id_alumno][area])
+            ? (califData[al.id_alumno][area][periodo] || "") : "";
+          var color = val ? (aprobados.includes(val) ? "#2E7D32" : "#C62828") : "#333";
+          html += '<td><select class="calif-input" style="color:'+color+';border-color:'+color
+            +'" data-id="'+al.id_alumno+'" data-area="'+area+'" data-apellido="'+al.apellido+' '+al.nombre
+            +'" data-grado="'+grado+'" data-seccion="'+seccion
+            +'" onchange="onCalifChange(this,\''+(!esPrimerCiclo).toString()+'\')">'
+            +'<option value="">—</option>' + escalaOpts
+            +'</select></td>';
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      html += '<div style="margin-top:8px;font-size:12px;color:var(--text-light)">';
+      html += esPrimerCiclo
+        ? '📌 Escala 1° Ciclo: <b>S</b>=Sobresaliente · <b>MB</b>=Muy Bueno · <b>B</b>=Bueno ✅ · <b>R</b>=Regular ❌ · <b>D</b>=Desaprobado ❌'
+        : '📌 Escala 2° Ciclo: <b>7-10</b>=Aprobado ✅ · <b>4-6</b>=Desaprobado ❌';
+      html += '</div>';
+
+      document.getElementById("califTabla").innerHTML = html;
+      document.getElementById("califAcciones").style.display = "block";
+
+      // Setear valores actuales en los selects
+      califAlumnos.forEach(function(al) {
+        areas.forEach(function(area) {
+          var val = (califData[al.id_alumno] && califData[al.id_alumno][area])
+            ? (califData[al.id_alumno][area][periodo] || "") : "";
+          var sel = document.querySelector('select[data-id="'+al.id_alumno+'"][data-area="'+area+'"]');
+          if (sel && val) sel.value = val;
+        });
+      });
+    });
+  });
+}
+
+function onCalifChange(sel, esNumerico) {
+  var val = sel.value;
+  var aprobados = esNumerico === "true" ? ["7","8","9","10"] : ["B","MB","S"];
+  var color = val ? (aprobados.includes(val) ? "#2E7D32" : "#C62828") : "#333";
+  sel.style.color = color;
+  sel.style.borderColor = val ? color : "#ccc";
+}
+
+function guardarCalificacionesBloque() {
+  var periodo = document.getElementById("califPeriodo").value;
+  var grado   = document.getElementById("califGrado").value;
+  var seccion = document.getElementById("califSeccion").value;
+  var sels = document.querySelectorAll(".calif-input");
+  var califs = [];
+  sels.forEach(function(sel) {
+    if (!sel.value) return;
+    var obj = {
+      id_alumno: sel.dataset.id,
+      apellido_nombre: sel.dataset.apellido,
+      grado: grado,
+      seccion: seccion,
+      area: sel.dataset.area,
+      ciclo_lectivo: APP.cicloLectivo
+    };
+    obj[periodo] = sel.value;
+    califs.push(obj);
+  });
+  if (califs.length === 0) { toast("No hay calificaciones para guardar"); return; }
+  document.getElementById("califStatus").textContent = "Guardando...";
+  callBackend("guardarCalificacionesBloque", {calificaciones: califs}, function(res) {
+    if (res.ok) {
+      toast("✅ " + res.data.guardadas + " calificaciones guardadas");
+      document.getElementById("califStatus").textContent = "✅ Guardado";
+    } else {
+      toast("❌ Error: " + res.error);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ALUMNOS
+// ════════════════════════════════════════════════════════════
+function renderAlumnos() {
+  var pc = document.getElementById("pageContent");
+  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+
+  pc.innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin:0">👨‍🎓 Alumnos</div>
+      ${esAdmin ? '<button class="btn btn-primary" onclick="abrirModalNuevoAlumno()">+ Nuevo alumno</button>' : ''}
+    </div>
+    <div class="filtros">
+      <select id="alumGrado" class="form-control" style="width:100px" onchange="cargarAlumnos()">
+        <option value="">Todos</option>
+        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}
+      </select>
+      <select id="alumSeccion" class="form-control" style="width:100px" onchange="cargarAlumnos()">
+        <option value="">Todas</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+      </select>
+      <input type="text" id="alumBuscar" class="form-control" style="width:200px" placeholder="🔍 Buscar..." oninput="filtrarAlumnos()">
+    </div>
+    <div id="alumnosTabla">Cargando...</div>
+  </div>`;
+
+  if (APP.usuario.rol === "maestro") {
+    document.getElementById("alumGrado").value = APP.usuario.grado;
+    document.getElementById("alumSeccion").value = APP.usuario.seccion;
+  }
+  cargarAlumnos();
+}
+
+var alumnosLista = [];
+
+function cargarAlumnos() {
+  var grado   = document.getElementById("alumGrado").value;
+  var seccion = document.getElementById("alumSeccion").value;
+  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(res) {
+    if (!res.ok) { document.getElementById("alumnosTabla").innerHTML = "<p>Error</p>"; return; }
+    alumnosLista = res.data;
+    renderTablaAlumnos(alumnosLista);
+  });
+}
+
+function filtrarAlumnos() {
+  var q = document.getElementById("alumBuscar").value.toLowerCase();
+  var filtrados = alumnosLista.filter(function(a) {
+    return (a.apellido + " " + a.nombre + " " + a.dni).toLowerCase().includes(q);
+  });
+  renderTablaAlumnos(filtrados);
+}
+
+function renderTablaAlumnos(lista) {
+  if (lista.length === 0) {
+    document.getElementById("alumnosTabla").innerHTML = '<div class="alert alert-info">No hay alumnos para mostrar.</div>';
+    return;
+  }
+  var html = '<div class="table-container"><table class="data-table"><thead><tr>'
+    +'<th>Apellido y Nombre</th><th>DNI</th><th>Grado</th><th>Sección</th><th>Responsable</th><th>Teléfono</th><th>Acciones</th>'
+    +'</tr></thead><tbody>';
+  lista.forEach(function(a) {
+    html += '<tr>'
+      +'<td style="font-weight:500">'+a.apellido+', '+a.nombre+'</td>'
+      +'<td>'+a.dni+'</td>'
+      +'<td style="text-align:center">'+a.grado+'°</td>'
+      +'<td style="text-align:center">'+a.seccion+'</td>'
+      +'<td>'+a.nombre_responsable+'</td>'
+      +'<td>'+a.telefono_responsable+'</td>'
+      +'<td><button class="btn btn-outline btn-sm" onclick=\'verAlumno('+JSON.stringify(a)+')\'>👁 Ver</button></td>'
+      +'</tr>';
+  });
+  html += "</tbody></table></div>";
+  document.getElementById("alumnosTabla").innerHTML = html;
+}
+
+function verAlumno(al) {
+  abrirModal("👨‍🎓 " + al.apellido + ", " + al.nombre,
+    `<div class="form-grid">
+      <div><b>DNI:</b> ${al.dni}</div>
+      <div><b>Nacimiento:</b> ${al.fecha_nacimiento}</div>
+      <div><b>Lugar:</b> ${al.lugar_nacimiento||'—'}</div>
+      <div><b>Domicilio:</b> ${al.domicilio||'—'}</div>
+      <div><b>Grado:</b> ${al.grado}°</div>
+      <div><b>Sección:</b> ${al.seccion}</div>
+      <div><b>Responsable:</b> ${al.nombre_responsable}</div>
+      <div><b>Tel:</b> ${al.telefono_responsable}</div>
+      <div><b>Email:</b> ${al.email_responsable||'—'}</div>
+      <div><b>Obra social:</b> ${al.obra_social||'—'}</div>
+    </div>
+    ${al.observaciones_medicas ? '<div class="alert alert-warning" style="margin-top:12px">⚕️ '+al.observaciones_medicas+'</div>' : ''}`,
+    [
+      {label:"📄 Ver boletín", cls:"btn-primary", fn:'verBoletin("'+al.id_alumno+'")'},
+      {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario"].includes(APP.usuario.rol)}
+    ]
+  );
+}
+
+function abrirModalNuevoAlumno() {
+  abrirModal("+ Nuevo alumno", `
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Apellido *</label><input id="nApellido" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Nombre *</label><input id="nNombre" class="form-control"></div>
+      <div class="form-group"><label class="form-label">DNI</label><input id="nDni" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Fecha nacimiento</label><input id="nFechaNac" type="date" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Grado *</label>
+        <select id="nGrado" class="form-control">${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}</select></div>
+      <div class="form-group"><label class="form-label">Sección *</label>
+        <select id="nSeccion" class="form-control"><option value="A">A</option><option value="B">B</option></select></div>
+      <div class="form-group"><label class="form-label">Domicilio</label><input id="nDomicilio" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Lugar nacimiento</label><input id="nLugar" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Responsable</label><input id="nResponsable" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Tel. Responsable</label><input id="nTelResp" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Email Responsable</label><input id="nEmailResp" type="email" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Obra social</label><input id="nObraSocial" class="form-control"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Obs. médicas</label><textarea id="nObsMed" class="form-control" rows="2"></textarea></div>`,
+    [{label:"💾 Crear alumno", cls:"btn-primary", fn:"crearAlumnoSubmit()"}]
+  );
+}
+
+function crearAlumnoSubmit() {
+  var data = {
+    apellido: v("nApellido"), nombre: v("nNombre"), dni: v("nDni"),
+    fecha_nacimiento: v("nFechaNac"), lugar_nacimiento: v("nLugar"),
+    domicilio: v("nDomicilio"), grado: v("nGrado"), seccion: v("nSeccion"),
+    nombre_responsable: v("nResponsable"), telefono_responsable: v("nTelResp"),
+    email_responsable: v("nEmailResp"), obra_social: v("nObraSocial"),
+    observaciones_medicas: v("nObsMed"), ciclo_lectivo: APP.cicloLectivo
+  };
+  if (!data.apellido || !data.nombre) { toast("Apellido y nombre son obligatorios"); return; }
+  callBackend("crearAlumno", data, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Alumno creado");
+      cargarAlumnos();
+    } else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// BOLETÍN
+// ════════════════════════════════════════════════════════════
+function renderBoletin() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📄 Generar Boletín</div>
+    <div class="filtros">
+      <select id="bolGrado" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">
+        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}
+      </select>
+      <select id="bolSeccion" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">
+        <option value="A">A</option><option value="B">B</option>
+      </select>
+    </div>
+    <div id="bolAlumnosLista">
+      <p style="color:var(--text-light);font-size:13px">Seleccioná grado y sección.</p>
+    </div>
+  </div>`;
+
+  if (APP.usuario.rol === "maestro") {
+    document.getElementById("bolGrado").value = APP.usuario.grado;
+    document.getElementById("bolSeccion").value = APP.usuario.seccion;
+  }
+  cargarAlumnosBoletin();
+}
+
+function cargarAlumnosBoletin() {
+  var grado   = document.getElementById("bolGrado").value;
+  var seccion = document.getElementById("bolSeccion").value;
+  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(res) {
+    if (!res.ok || res.data.length === 0) {
+      document.getElementById("bolAlumnosLista").innerHTML = '<div class="alert alert-info">Sin alumnos.</div>';
+      return;
+    }
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Alumno/a</th><th>Grado</th><th>Sección</th><th>Acción</th></tr></thead><tbody>';
+    res.data.forEach(function(a) {
+      html += '<tr><td>'+a.apellido+', '+a.nombre+'</td><td>'+a.grado+'°</td><td>'+a.seccion+'</td>'
+        +'<td><button class="btn btn-primary btn-sm" onclick="verBoletin(\''+a.id_alumno+'\')">📄 Ver boletín</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="margin-top:12px"><button class="btn btn-outline" onclick="generarTodosBoletines()">📄 Generar todos ('+res.data.length+')</button></div>';
+    document.getElementById("bolAlumnosLista").innerHTML = html;
+  });
+}
+
+function verBoletin(id_alumno) {
+  toast("Generando boletín...");
+  callBackend("generarBoletin", {id_alumno: id_alumno, ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    if (res.ok) {
+      var win = window.open("", "_blank");
+      win.document.write(res.data.html);
+      win.document.close();
+    } else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// LEGAJOS EOE
+// ════════════════════════════════════════════════════════════
+function renderLegajos() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin:0">📂 Legajos EOE</div>
+      <button class="btn btn-primary" onclick="abrirModalNuevoLegajo()">+ Nuevo legajo</button>
+    </div>
+    <div class="filtros">
+      <select id="legGrado" class="form-control" style="width:100px" onchange="cargarLegajos()">
+        <option value="">Todos</option>
+        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}
+      </select>
+      <select id="legSeccion" class="form-control" style="width:100px" onchange="cargarLegajos()">
+        <option value="">Todas</option><option value="A">A</option><option value="B">B</option>
+      </select>
+    </div>
+    <div id="legajosList">Cargando...</div>
+  </div>`;
+  cargarLegajos();
+}
+
+function cargarLegajos() {
+  var grado   = document.getElementById("legGrado").value;
+  var seccion = document.getElementById("legSeccion").value;
+  callBackend("getLegajos", {grado: grado, seccion: seccion}, function(res) {
+    if (!res.ok) { document.getElementById("legajosList").innerHTML = "<p>Error</p>"; return; }
+    if (res.data.length === 0) {
+      document.getElementById("legajosList").innerHTML = '<div class="alert alert-info">No hay legajos.</div>';
+      return;
+    }
+    var html = res.data.map(function(l) {
+      return '<div class="legajo-card" onclick=\'verLegajo("'+l.id_legajo+'")\'>'
+        +'<div class="legajo-header">'
+        +'<div><div class="legajo-nombre">'+l.apellido_nombre+'</div>'
+        +'<div class="legajo-meta">'+l.grado+'° '+l.seccion+' · Apertura: '+l.fecha_apertura+' · '+l.profesional_a_cargo+'</div></div>'
+        +'<span class="estado-badge estado-'+l.estado+'">'+l.estado+'</span>'
+        +'</div>'
+        +'<div style="font-size:12px;color:var(--text-light);margin-top:6px">'+l.motivo+'</div>'
+        +'</div>';
+    }).join("");
+    document.getElementById("legajosList").innerHTML = html;
+  });
+}
+
+function verLegajo(id) {
+  callBackend("getLegajo", {id_legajo: id}, function(res) {
+    if (!res.ok) { toast("Error"); return; }
+    var l = res.data;
+    callBackend("getHistorial", {id_legajo: id}, function(resH) {
+      var histHtml = resH.ok && resH.data.length > 0
+        ? resH.data.map(function(h) {
+            return '<div style="border-left:3px solid var(--primary);padding:8px 12px;margin-bottom:8px;background:#f9f9f9;border-radius:0 6px 6px 0">'
+              +'<div style="font-size:12px;color:var(--text-light)">'+h.fecha+' · '+h.tipo_intervencion+' · '+h.profesional+'</div>'
+              +'<div style="font-size:13px;margin-top:4px">'+h.descripcion+'</div></div>';
+          }).join("")
+        : '<p style="color:var(--text-light);font-size:13px">Sin entradas en el historial.</p>';
+
+      abrirModal("📂 Legajo — " + l.apellido_nombre,
+        `<div class="form-grid" style="margin-bottom:12px">
+          <div><b>Grado:</b> ${l.grado}° ${l.seccion}</div>
+          <div><b>Estado:</b> <span class="estado-badge estado-${l.estado}">${l.estado}</span></div>
+          <div><b>Apertura:</b> ${l.fecha_apertura}</div>
+          <div><b>Profesional:</b> ${l.profesional_a_cargo}</div>
+          <div><b>Tipo:</b> ${l.tipo}</div>
+          <div><b>Motivo:</b> ${l.motivo}</div>
+        </div>
+        ${l.observaciones ? '<div class="alert alert-info" style="margin-bottom:12px">'+l.observaciones+'</div>' : ''}
+        <h4 style="color:var(--primary);margin-bottom:8px">Historial de intervenciones</h4>
+        ${histHtml}
+        <hr style="margin:12px 0">
+        <h4 style="color:var(--primary);margin-bottom:8px">+ Nueva entrada</h4>
+        <div class="form-group"><label class="form-label">Tipo de intervención</label>
+          <select id="hTipo" class="form-control">
+            <option>Entrevista familiar</option><option>Entrevista al alumno</option>
+            <option>Reunión interdisciplinaria</option><option>Seguimiento pedagógico</option>
+            <option>Derivación</option><option>Otro</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">Descripción</label>
+          <textarea id="hDesc" class="form-control" rows="3" placeholder="Describí la intervención..."></textarea></div>`,
+        [{label:"💾 Agregar entrada", cls:"btn-primary", fn:'agregarEntradaHistorial("'+id+'","'+l.id_alumno+'")'}]
+      );
+    });
+  });
+}
+
+function agregarEntradaHistorial(idLegajo, idAlumno) {
+  var data = {
+    id_legajo: idLegajo,
+    id_alumno: idAlumno,
+    tipo_intervencion: v("hTipo"),
+    descripcion: v("hDesc")
+  };
+  if (!data.descripcion) { toast("Escribí la descripción"); return; }
+  callBackend("agregarHistorial", data, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Entrada agregada");
+      cargarLegajos();
+    } else toast("❌ " + res.error);
+  });
+}
+
+function abrirModalNuevoLegajo() {
+  abrirModal("+ Nuevo Legajo EOE", `
+    <div class="form-group"><label class="form-label">Buscar alumno</label>
+      <input id="legBusqueda" class="form-control" placeholder="Apellido del alumno..." oninput="buscarAlumnoLegajo()">
+    </div>
+    <div id="legAlumnoResultados"></div>
+    <div id="legDatos" style="display:none">
+      <input type="hidden" id="legIdAlumno">
+      <input type="hidden" id="legNombreAlumno">
+      <div class="form-group"><label class="form-label">Motivo de apertura</label>
+        <textarea id="legMotivo" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label class="form-label">Tipo</label>
+        <select id="legTipo" class="form-control">
+          <option>Seguimiento pedagógico</option><option>Problemática familiar</option>
+          <option>Salud</option><option>Ausentismo</option><option>Otro</option>
+        </select></div>
+    </div>`,
+    [{label:"💾 Crear legajo", cls:"btn-primary", fn:"crearLegajoSubmit()"}]
+  );
+}
+
+function buscarAlumnoLegajo() {
+  var q = v("legBusqueda").toLowerCase();
+  if (q.length < 2) return;
+  callBackend("getAlumnos", {}, function(res) {
+    if (!res.ok) return;
+    var filtrados = res.data.filter(function(a){
+      return (a.apellido+" "+a.nombre).toLowerCase().includes(q);
+    }).slice(0,5);
+    var html = filtrados.map(function(a) {
+      return '<div style="padding:8px;cursor:pointer;border:1px solid var(--border);border-radius:4px;margin-bottom:4px" '
+        +'onclick=\'seleccionarAlumnoLegajo("'+a.id_alumno+'","'+a.apellido+', '+a.nombre+'","'+a.grado+'","'+a.seccion+'")\'>'
+        +'<b>'+a.apellido+', '+a.nombre+'</b> — '+a.grado+'° '+a.seccion+'</div>';
+    }).join("");
+    document.getElementById("legAlumnoResultados").innerHTML = html;
+  });
+}
+
+function seleccionarAlumnoLegajo(id, nombre, grado, seccion) {
+  document.getElementById("legIdAlumno").value = id;
+  document.getElementById("legNombreAlumno").value = nombre;
+  document.getElementById("legAlumnoResultados").innerHTML = '<div class="alert alert-success">✅ '+nombre+' ('+grado+'° '+seccion+')</div>';
+  document.getElementById("legDatos").style.display = "block";
+}
+
+function crearLegajoSubmit() {
+  var idAlumno = v("legIdAlumno");
+  if (!idAlumno) { toast("Seleccioná un alumno"); return; }
+  callBackend("crearLegajo", {
+    id_alumno: idAlumno,
+    apellido_nombre: v("legNombreAlumno"),
+    motivo: v("legMotivo"),
+    tipo: v("legTipo")
+  }, function(res) {
+    if (res.ok) { cerrarModal(); toast("✅ Legajo creado"); cargarLegajos(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// AUSENCIAS DOCENTES
+// ════════════════════════════════════════════════════════════
+function renderAusenciasDocentes() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin:0">👨‍🏫 Ausencias Docentes</div>
+      <button class="btn btn-primary" onclick="abrirModalAusenciaDocente()">+ Registrar ausencia</button>
+    </div>
+    <div class="filtros">
+      <input type="date" id="ausDocFecha" class="form-control" style="width:180px" value="${fechaHoy()}" onchange="cargarAusenciasDocentes()">
+    </div>
+    <div id="ausDocentesList">Cargando...</div>
+  </div>`;
+  cargarAusenciasDocentes();
+}
+
+function cargarAusenciasDocentes() {
+  var fecha = document.getElementById("ausDocFecha").value;
+  callBackend("getAusenciasDocentes", {fecha: fecha}, function(res) {
+    if (!res.ok || res.data.length === 0) {
+      document.getElementById("ausDocentesList").innerHTML = '<div class="alert alert-info">Sin ausencias registradas para esta fecha.</div>';
+      return;
+    }
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Docente</th><th>Grado</th><th>Sección</th><th>Motivo</th><th>Reemplazante</th></tr></thead><tbody>';
+    res.data.forEach(function(a) {
+      html += '<tr><td>'+a.docente_nombre+'</td><td>'+a.grado+'°</td><td>'+a.seccion+'</td><td>'+a.motivo+'</td><td>'+(a.reemplazante||'—')+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    document.getElementById("ausDocentesList").innerHTML = html;
+  });
+}
+
+function abrirModalAusenciaDocente() {
+  abrirModal("+ Registrar Ausencia Docente", `
+    <div class="form-group"><label class="form-label">Fecha</label><input id="adFecha" type="date" class="form-control" value="${fechaHoy()}"></div>
+    <div class="form-group"><label class="form-label">Nombre del docente</label><input id="adNombre" class="form-control"></div>
+    <div class="form-group"><label class="form-label">Email del docente</label><input id="adEmail" type="email" class="form-control"></div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Grado</label>
+        <select id="adGrado" class="form-control">${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}</select></div>
+      <div class="form-group"><label class="form-label">Sección</label>
+        <select id="adSeccion" class="form-control"><option value="A">A</option><option value="B">B</option></select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Motivo</label>
+      <select id="adMotivo" class="form-control">
+        <option>Enfermedad</option><option>Licencia</option><option>Capacitación</option><option>Otro</option>
+      </select></div>
+    <div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>`,
+    [{label:"💾 Registrar", cls:"btn-primary", fn:"registrarAusenciaDocenteSubmit()"}]
+  );
+}
+
+function registrarAusenciaDocenteSubmit() {
+  callBackend("registrarAusenciaDocente", {
+    fecha: v("adFecha"), docente_nombre: v("adNombre"), docente_email: v("adEmail"),
+    grado: v("adGrado"), seccion: v("adSeccion"), motivo: v("adMotivo"), reemplazante: v("adReemplazante")
+  }, function(res) {
+    if (res.ok) { cerrarModal(); toast("✅ Ausencia registrada"); cargarAusenciasDocentes(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// MENSAJES
+// ════════════════════════════════════════════════════════════
+function renderMensajes() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin:0">✉️ Mensajes</div>
+      <button class="btn btn-primary" onclick="abrirModalNuevoMensaje()">+ Nuevo mensaje</button>
+    </div>
+    <div id="mensajesList">Cargando...</div>
+  </div>`;
+  cargarMensajes();
+}
+
+function cargarMensajes() {
+  callBackend("getMensajes", {}, function(res) {
+    if (!res.ok || res.data.length === 0) {
+      document.getElementById("mensajesList").innerHTML = '<div class="alert alert-info">No hay mensajes.</div>';
+      return;
+    }
+    var html = res.data.map(function(m) {
+      var leido = m.leido_por && m.leido_por.includes(APP.usuario.email);
+      return '<div class="msg-item'+(leido?'':' unread')+'" onclick=\'verMensaje('+JSON.stringify(m)+')\' >'
+        +'<div class="msg-asunto">'+(leido?'':'🔵 ')+m.asunto+'</div>'
+        +'<div class="msg-meta">De: '+m.de+' · Para: '+m.para+' · '+m.fecha+'</div>'
+        +'</div>';
+    }).join("");
+    document.getElementById("mensajesList").innerHTML = html;
+  });
+}
+
+function verMensaje(m) {
+  callBackend("marcarLeido", {id_mensaje: m.id_mensaje}, function(){});
+  abrirModal("✉️ " + m.asunto, `
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:12px">
+      <b>De:</b> ${m.de} · <b>Para:</b> ${m.para} · <b>Fecha:</b> ${m.fecha}
+    </div>
+    <div style="font-size:14px;white-space:pre-wrap">${m.cuerpo}</div>`, []);
+}
+
+function abrirModalNuevoMensaje() {
+  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  abrirModal("+ Nuevo Mensaje", `
+    <div class="form-group"><label class="form-label">Para</label>
+      <select id="msgPara" class="form-control">
+        <option value="todos">Todos</option>
+        ${esAdmin ? [1,2,3,4,5,6].map(g=>['A','B'].map(s=>'<option value="'+g+s+'">'+g+'° '+s+'</option>').join('')).join(''):''}
+      </select></div>
+    <div class="form-group"><label class="form-label">Asunto</label><input id="msgAsunto" class="form-control"></div>
+    <div class="form-group"><label class="form-label">Mensaje</label><textarea id="msgCuerpo" class="form-control" rows="5"></textarea></div>`,
+    [{label:"📤 Enviar", cls:"btn-primary", fn:"enviarMensajeSubmit()"}]
+  );
+}
+
+function enviarMensajeSubmit() {
+  callBackend("enviarMensaje", {para: v("msgPara"), asunto: v("msgAsunto"), cuerpo: v("msgCuerpo")}, function(res) {
+    if (res.ok) { cerrarModal(); toast("✅ Mensaje enviado"); cargarMensajes(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// USUARIOS
+// ════════════════════════════════════════════════════════════
+function renderUsuarios() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin:0">👥 Usuarios del sistema</div>
+      <button class="btn btn-primary" onclick="abrirModalNuevoUsuario()">+ Nuevo usuario</button>
+    </div>
+    <div id="usuariosList">Cargando...</div>
+  </div>`;
+  cargarUsuarios();
+}
+
+function cargarUsuarios() {
+  callBackend("getUsuarios", {}, function(res) {
+    if (!res.ok) return;
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Grado</th><th>Sección</th><th>Activo</th></tr></thead><tbody>';
+    res.data.forEach(function(u) {
+      html += '<tr><td>'+u.email+'</td><td>'+u.nombre+' '+u.apellido+'</td><td><span class="badge badge-P">'+u.rol+'</span></td>'
+        +'<td style="text-align:center">'+(u.grado_asignado||'—')+'</td>'
+        +'<td style="text-align:center">'+(u.seccion_asignada||'—')+'</td>'
+        +'<td style="text-align:center">'+(u.activo===true||u.activo==='TRUE'?'✅':'❌')+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    document.getElementById("usuariosList").innerHTML = html;
+  });
+}
+
+function abrirModalNuevoUsuario() {
+  abrirModal("+ Nuevo Usuario", `
+    <div class="form-group"><label class="form-label">Email Google *</label><input id="uEmail" type="email" class="form-control" placeholder="usuario@gmail.com"></div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Nombre *</label><input id="uNombre" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Apellido *</label><input id="uApellido" class="form-control"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Rol *</label>
+      <select id="uRol" class="form-control" onchange="toggleGradoUsuario()">
+        <option value="director">Director/a</option>
+        <option value="vicedirector">Vicedirector/a</option>
+        <option value="secretario">Secretario/a</option>
+        <option value="maestro">Maestro/a de grado</option>
+        <option value="eoe">EOE</option>
+      </select></div>
+    <div id="uGradoSec" style="display:none" class="form-grid">
+      <div class="form-group"><label class="form-label">Grado asignado</label>
+        <select id="uGrado" class="form-control">${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}</select></div>
+      <div class="form-group"><label class="form-label">Sección asignada</label>
+        <select id="uSeccion" class="form-control"><option value="A">A</option><option value="B">B</option></select></div>
+    </div>`,
+    [{label:"💾 Crear usuario", cls:"btn-primary", fn:"crearUsuarioSubmit()"}]
+  );
+}
+
+function toggleGradoUsuario() {
+  var rol = document.getElementById("uRol") ? document.getElementById("uRol").value : "";
+  var div = document.getElementById("uGradoSec");
+  if (div) div.style.display = rol === "maestro" ? "grid" : "none";
+}
+
+function crearUsuarioSubmit() {
+  callBackend("crearUsuario", {
+    email: v("uEmail"), nombre: v("uNombre"), apellido: v("uApellido"),
+    rol: v("uRol"), grado_asignado: v("uGrado"), seccion_asignada: v("uSeccion")
+  }, function(res) {
+    if (res.ok) { cerrarModal(); toast("✅ Usuario creado"); cargarUsuarios(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ════════════════════════════════════════════════════════════
+function renderConfiguracion() {
+  var pc = document.getElementById("pageContent");
+  var c = APP.config;
+  pc.innerHTML = `
+  <div class="card">
+    <div class="card-title">⚙️ Configuración de la institución</div>
+    <div class="alert alert-info" style="margin-bottom:16px">Estos datos se guardan en la hoja <b>Config</b> del Spreadsheet. Modificarlos acá actualiza el Sheets directamente.</div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Nombre de la escuela</label><input id="cfgNombre" class="form-control" value="${c.NOMBRE_ESCUELA||''}"></div>
+      <div class="form-group"><label class="form-label">CUE</label><input id="cfgCue" class="form-control" value="${c.CUE||''}"></div>
+      <div class="form-group"><label class="form-label">Distrito</label><input id="cfgDistrito" class="form-control" value="${c.DISTRITO||''}"></div>
+      <div class="form-group"><label class="form-label">Domicilio</label><input id="cfgDomicilio" class="form-control" value="${c.DOMICILIO_ESCUELA||''}"></div>
+      <div class="form-group"><label class="form-label">Ciclo Lectivo</label><input id="cfgCiclo" class="form-control" value="${c.CICLO_LECTIVO||''}"></div>
+      <div class="form-group"><label class="form-label">Turno</label>
+        <select id="cfgTurno" class="form-control">
+          <option${c.TURNO==='Mañana'?' selected':''}>Mañana</option>
+          <option${c.TURNO==='Tarde'?' selected':''}>Tarde</option>
+          <option${c.TURNO==='Completo'?' selected':''}>Completo</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Color primario</label><input id="cfgColor" type="color" class="form-control" value="${c.COLOR_PRIMARIO||'#1565C0'}"></div>
+    </div>
+    <div class="alert alert-warning">⚠️ Para cambiar el color, Firebase o el ID del Spreadsheet, editá la hoja Config directamente en Google Sheets.</div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════════════════════
+function abrirModal(titulo, cuerpo, botones) {
+  document.getElementById("modalTitle").textContent = titulo;
+  document.getElementById("modalBody").innerHTML = cuerpo;
+  var footer = document.getElementById("modalFooter");
+  footer.innerHTML = '<button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>';
+  (botones||[]).forEach(function(b) {
+    if (b.show === false) return;
+    var btn = document.createElement("button");
+    btn.className = "btn " + (b.cls||"btn-primary");
+    btn.textContent = b.label;
+    btn.setAttribute("onclick", b.fn);
+    footer.appendChild(btn);
+  });
+  document.getElementById("modalOverlay").classList.add("open");
+}
+
+function cerrarModal() {
+  document.getElementById("modalOverlay").classList.remove("open");
+}
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+function v(id) {
+  var el = document.getElementById(id);
+  return el ? el.value : "";
+}
+
+function fechaHoy() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function toast(msg, dur) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, dur||3000);
+}
+
+function mostrarError(msg) {
+  var t = document.getElementById("toast");
+  t.style.background = "#C62828";
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); t.style.background="#323232"; }, 5000);
+}
+
+// ════════════════════════════════════════════════════════════
+// BACKEND CALL
+// ════════════════════════════════════════════════════════════
+function callBackend(accion, data, callback) {
+  var token = APP.usuario ? APP.usuario.email : "";
+  var payload = Object.assign({}, data, {accion: accion, token: token});
+
+  fetch(BACKEND_URL, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(json){ callback(json); })
+  .catch(function(err){
+    // Fallback JSONP para GET simple
+    if (["getConfig","verificarUsuario","ping"].includes(accion)) {
+      var url = BACKEND_URL + "?accion=" + accion + "&token=" + encodeURIComponent(token);
+      Object.keys(data).forEach(function(k){ url += "&"+k+"="+encodeURIComponent(data[k]||""); });
+      var cb = "cb_" + Date.now();
+      window[cb] = function(json){ delete window[cb]; callback(json); };
+      var s = document.createElement("script");
+      s.src = url + "&callback=" + cb;
+      document.head.appendChild(s);
+    } else {
+      callback({ok:false, error: "Error de red: " + err.message});
+    }
+  });
+}
+</script>
+</body>
+</html>
