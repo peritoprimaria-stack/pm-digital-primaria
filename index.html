@@ -322,6 +322,7 @@ var BACKEND_URL = "https://script.google.com/macros/s/AKfycbwUNUY_PAKwPUQ_Ps2FZw
 // ════════════════════════════════════════════════════════════
 // ESTADO GLOBAL
 // ════════════════════════════════════════════════════════════
+var LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
 var APP = {
   usuario: null,
   config: {},
@@ -1215,6 +1216,7 @@ function agregarEntradaHistorial(idLegajo, idAlumno) {
 }
 
 function abrirModalNuevoLegajo() {
+  LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""}; // limpiar selección previa
   abrirModal("+ Nuevo Legajo EOE", `
     <div class="form-group"><label class="form-label">Buscar alumno</label>
       <input id="legBusqueda" class="form-control" placeholder="Apellido del alumno..." oninput="buscarAlumnoLegajo()">
@@ -1284,23 +1286,37 @@ function mostrarResultadosLegajo(lista, q) {
 
 
 function seleccionarAlumnoLegajo(id, nombre, grado, seccion) {
-  document.getElementById("legIdAlumno").value = id;
-  document.getElementById("legNombreAlumno").value = nombre;
-  document.getElementById("legAlumnoResultados").innerHTML = '<div class="alert alert-success">✅ '+nombre+' ('+grado+'° '+seccion+')</div>';
-  document.getElementById("legDatos").style.display = "block";
+  // Guardar en variable global (más confiable que inputs hidden en modal)
+  LEGAJO_ALUMNO_SEL = {id: id, nombre: nombre, grado: grado, seccion: seccion};
+  // También intentar escribir en los inputs si existen
+  var elId = document.getElementById("legIdAlumno");
+  var elNom = document.getElementById("legNombreAlumno");
+  if (elId) elId.value = id;
+  if (elNom) elNom.value = nombre;
+  // Mostrar confirmación
+  var resEl = document.getElementById("legAlumnoResultados");
+  if (resEl) resEl.innerHTML = '<div class="alert alert-success">✅ <b>' + nombre + '</b> — ' + grado + '° ' + seccion + '</div>';
+  var datosEl = document.getElementById("legDatos");
+  if (datosEl) datosEl.style.display = "block";
 }
 
 function crearLegajoSubmit() {
-  var idAlumno = v("legIdAlumno");
-  if (!idAlumno) { toast("Seleccioná un alumno"); return; }
+  // Usar variable global como fuente principal, inputs como fallback
+  var idAlumno = LEGAJO_ALUMNO_SEL.id || v("legIdAlumno");
+  var nombreAlumno = LEGAJO_ALUMNO_SEL.nombre || v("legNombreAlumno");
+  if (!idAlumno) { toast("Primero buscá y seleccioná un alumno"); return; }
   callBackend("crearLegajo", {
     id_alumno: idAlumno,
-    apellido_nombre: v("legNombreAlumno"),
+    apellido_nombre: nombreAlumno,
     motivo: v("legMotivo"),
     tipo: v("legTipo")
   }, function(res) {
-    if (res.ok) { cerrarModal(); toast("✅ Legajo creado"); cargarLegajos(); }
-    else toast("❌ " + res.error);
+    if (res.ok) {
+      LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""}; // limpiar
+      cerrarModal();
+      toast("✅ Legajo creado");
+      cargarLegajos();
+    } else toast("❌ " + res.error);
   });
 }
 
