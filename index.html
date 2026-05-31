@@ -1056,27 +1056,76 @@ function crearAlumnoSubmit() {
 // ════════════════════════════════════════════════════════════
 function renderBoletin() {
   var pc = document.getElementById("pageContent");
-  pc.innerHTML = `
-  <div class="card">
-    <div class="card-title">📄 Generar Boletín</div>
-    <div class="filtros">
-      <select id="bolGrado" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">
-        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}
-      </select>
-      <select id="bolSeccion" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">
-        <option value="A">A</option><option value="B">B</option>
-      </select>
-    </div>
-    <div id="bolAlumnosLista">
-      <p style="color:var(--text-light);font-size:13px">Seleccioná grado y sección.</p>
-    </div>
-  </div>`;
+  var gOpts = [1,2,3,4,5,6].map(function(g){ return '<option value="'+g+'">'+g+'°</option>'; }).join('');
+  pc.innerHTML =
+  '<div class="card">' +
+    '<div class="card-title">📄 Boletines y Observaciones</div>' +
+    // Tabs
+    '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">' +
+      '<button id="bolTab1" class="bol-tab active" onclick="bolCambiarTab(1)">📄 Generar boletín</button>' +
+      '<button id="bolTab2" class="bol-tab" onclick="bolCambiarTab(2)">✏️ Cargar observaciones</button>' +
+    '</div>' +
+    // Panel 1: generar boletín
+    '<div id="bolPanel1">' +
+      '<div class="filtros">' +
+        '<select id="bolGrado" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">' + gOpts + '</select>' +
+        '<select id="bolSeccion" class="form-control" style="width:100px" onchange="cargarAlumnosBoletin()">' +
+          '<option value="A">A</option><option value="B">B</option>' +
+        '</select>' +
+      '</div>' +
+      '<div id="bolAlumnosLista"><p style="color:var(--text-light);font-size:13px">Seleccioná grado y sección.</p></div>' +
+    '</div>' +
+    // Panel 2: observaciones
+    '<div id="bolPanel2" style="display:none">' +
+      '<div class="filtros">' +
+        '<select id="obsGrado" class="form-control" style="width:100px" onchange="cargarAlumnosObs()">' + gOpts + '</select>' +
+        '<select id="obsSeccion" class="form-control" style="width:100px" onchange="cargarAlumnosObs()">' +
+          '<option value="A">A</option><option value="B">B</option>' +
+        '</select>' +
+        '<select id="obsInforme" class="form-control" style="width:160px" onchange="cargarAlumnosObs()">' +
+          '<option value="1">1° Informe Trimestral</option>' +
+          '<option value="2">2° Informe Trimestral</option>' +
+          '<option value="3">3° Informe Trimestral</option>' +
+          '<option value="PE">Período Extendido</option>' +
+          '<option value="F">Informe Final</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="alert alert-info" style="margin-bottom:12px">✏️ Escribí las observaciones de cada alumno/a y guardá al final.</div>' +
+      '<div id="obsAlumnosList"><p style="color:var(--text-light);font-size:13px">Seleccioná grado, sección e informe.</p></div>' +
+    '</div>' +
+  '</div>';
+
+  // CSS tabs inline (una sola vez)
+  if (!document.getElementById('bolTabStyle')) {
+    var s = document.createElement('style');
+    s.id = 'bolTabStyle';
+    s.textContent =
+      '.bol-tab{padding:8px 18px;border:none;background:none;font-size:13px;font-weight:500;color:var(--text-light);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.15s}' +
+      '.bol-tab.active{color:var(--primary);border-bottom-color:var(--primary);background:rgba(183,28,28,.04)}' +
+      '.bol-tab:hover{background:rgba(183,28,28,.04)}' +
+      '.obs-alumno-row{border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}' +
+      '.obs-alumno-nombre{font-weight:600;font-size:13px;margin-bottom:6px;color:var(--primary)}' +
+      '.obs-textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.5;resize:vertical;min-height:64px;transition:.15s}' +
+      '.obs-textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(183,28,28,.1)}' +
+      '.obs-guardado{font-size:11px;color:var(--success);margin-top:4px;display:none}';
+    document.head.appendChild(s);
+  }
 
   if (APP.usuario.rol === "maestro") {
     document.getElementById("bolGrado").value = APP.usuario.grado;
     document.getElementById("bolSeccion").value = APP.usuario.seccion;
+    document.getElementById("obsGrado").value = APP.usuario.grado;
+    document.getElementById("obsSeccion").value = APP.usuario.seccion;
   }
   cargarAlumnosBoletin();
+}
+
+function bolCambiarTab(n) {
+  document.getElementById("bolPanel1").style.display = n === 1 ? "" : "none";
+  document.getElementById("bolPanel2").style.display = n === 2 ? "" : "none";
+  document.getElementById("bolTab1").classList.toggle("active", n === 1);
+  document.getElementById("bolTab2").classList.toggle("active", n === 2);
+  if (n === 2) cargarAlumnosObs();
 }
 
 function cargarAlumnosBoletin() {
@@ -1084,17 +1133,131 @@ function cargarAlumnosBoletin() {
   var seccion = document.getElementById("bolSeccion").value;
   callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(res) {
     if (!res.ok || res.data.length === 0) {
-      document.getElementById("bolAlumnosLista").innerHTML = '<div class="alert alert-info">Sin alumnos.</div>';
+      document.getElementById("bolAlumnosLista").innerHTML = '<div class="alert alert-info">Sin alumnos para este grado/sección.</div>';
       return;
     }
-    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Alumno/a</th><th>Grado</th><th>Sección</th><th>Acción</th></tr></thead><tbody>';
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Alumno/a</th><th>Grado</th><th>Sección</th><th>Acciones</th></tr></thead><tbody>';
     res.data.forEach(function(a) {
-      html += '<tr><td>'+a.apellido+', '+a.nombre+'</td><td>'+a.grado+'°</td><td>'+a.seccion+'</td>'
-        +'<td><button class="btn btn-primary btn-sm" onclick="verBoletin(\''+a.id_alumno+'\')">📄 Ver boletín</button></td></tr>';
+      html += '<tr>'
+        +'<td style="font-weight:500">'+a.apellido+', '+a.nombre+'</td>'
+        +'<td style="text-align:center">'+a.grado+'°</td>'
+        +'<td style="text-align:center">'+a.seccion+'</td>'
+        +'<td style="display:flex;gap:6px">'
+          +'<button class="btn btn-primary btn-sm" onclick="verBoletin(\''+a.id_alumno+'\')">📄 Boletín</button>'
+          +'<button class="btn btn-outline btn-sm" onclick="irObservacionesAlumno(\''+a.id_alumno+'\',\''+a.apellido+'\',\''+a.nombre+'\')">✏️ Obs.</button>'
+        +'</td>'
+      +'</tr>';
     });
     html += '</tbody></table></div>';
-    html += '<div style="margin-top:12px"><button class="btn btn-outline" onclick="generarTodosBoletines()">📄 Generar todos ('+res.data.length+')</button></div>';
+    html += '<div style="margin-top:12px"><button class="btn btn-outline btn-sm" onclick="generarTodosBoletines()">📄 Generar todos ('+res.data.length+')</button></div>';
     document.getElementById("bolAlumnosLista").innerHTML = html;
+  });
+}
+
+// Ir directo a observaciones de un alumno desde la tabla
+function irObservacionesAlumno(id, apellido, nombre) {
+  bolCambiarTab(2);
+  // Pequeño delay para que el panel esté visible antes de hacer scroll
+  setTimeout(function() {
+    var el = document.getElementById("obsRow_" + id);
+    if (el) { el.scrollIntoView({behavior:"smooth", block:"center"}); el.style.borderColor="var(--primary)"; setTimeout(function(){ el.style.borderColor=""; }, 1500); }
+  }, 300);
+}
+
+// ── OBSERVACIONES ──────────────────────────────────────────
+var obsAlumnosCache = [];
+
+function cargarAlumnosObs() {
+  var grado   = document.getElementById("obsGrado").value;
+  var seccion = document.getElementById("obsSeccion").value;
+  var informe = document.getElementById("obsInforme").value;
+  var cont    = document.getElementById("obsAlumnosList");
+  cont.innerHTML = '<p style="color:var(--text-light);font-size:13px">Cargando...</p>';
+
+  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(resA) {
+    if (!resA.ok || resA.data.length === 0) {
+      cont.innerHTML = '<div class="alert alert-info">Sin alumnos para este grado/sección.</div>';
+      return;
+    }
+    obsAlumnosCache = resA.data;
+    // Cargar observaciones existentes para este informe
+    callBackend("getObservaciones", {ciclo_lectivo: APP.cicloLectivo, informe_nro: informe}, function(resO) {
+      var obsMap = {};
+      if (resO.ok) {
+        resO.data.forEach(function(o) { obsMap[o.id_alumno] = o.texto; });
+      }
+      var html = '';
+      obsAlumnosCache.forEach(function(a) {
+        var textoExistente = obsMap[a.id_alumno] || '';
+        html +=
+          '<div class="obs-alumno-row" id="obsRow_'+a.id_alumno+'">' +
+            '<div class="obs-alumno-nombre">'+a.apellido+', '+a.nombre+' &nbsp;<span style="font-weight:400;color:var(--text-light);font-size:11px">'+a.grado+'° '+a.seccion+'</span></div>' +
+            '<textarea class="obs-textarea" id="obsText_'+a.id_alumno+'" placeholder="Escribí las observaciones del docente para este período...">'+textoExistente+'</textarea>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">' +
+              '<button class="btn btn-outline btn-sm" onclick="guardarObsAlumno(\''+a.id_alumno+'\',\''+a.apellido+' '+a.nombre+'\',\''+a.grado+'\',\''+a.seccion+'\')">💾 Guardar esta obs.</button>' +
+              '<span class="obs-guardado" id="obsOk_'+a.id_alumno+'">✅ Guardado</span>' +
+            '</div>' +
+          '</div>';
+      });
+      html += '<div style="margin-top:16px;display:flex;justify-content:flex-end">' +
+        '<button class="btn btn-primary" onclick="guardarTodasObs()">💾 Guardar todas las observaciones</button>' +
+      '</div>';
+      cont.innerHTML = html;
+    });
+  });
+}
+
+function guardarObsAlumno(id_alumno, apellido_nombre, grado, seccion) {
+  var informe = document.getElementById("obsInforme").value;
+  var texto   = document.getElementById("obsText_" + id_alumno).value;
+  var okEl    = document.getElementById("obsOk_" + id_alumno);
+  callBackend("guardarObservacion", {
+    id_alumno:      id_alumno,
+    apellido_nombre: apellido_nombre,
+    grado:          grado,
+    seccion:        seccion,
+    informe_nro:    informe,
+    texto:          texto,
+    ciclo_lectivo:  APP.cicloLectivo
+  }, function(res) {
+    if (res.ok) {
+      okEl.style.display = "inline";
+      setTimeout(function(){ okEl.style.display = "none"; }, 2500);
+    } else {
+      toast("❌ Error al guardar: " + res.error);
+    }
+  });
+}
+
+function guardarTodasObs() {
+  var informe  = document.getElementById("obsInforme").value;
+  var pendientes = obsAlumnosCache.length;
+  var guardadas  = 0;
+  var errores    = 0;
+  if (pendientes === 0) { toast("No hay alumnos cargados"); return; }
+  toast("Guardando " + pendientes + " observaciones...");
+  obsAlumnosCache.forEach(function(a) {
+    var texto = document.getElementById("obsText_" + a.id_alumno);
+    if (!texto) { pendientes--; return; }
+    callBackend("guardarObservacion", {
+      id_alumno:       a.id_alumno,
+      apellido_nombre: a.apellido + " " + a.nombre,
+      grado:           a.grado,
+      seccion:         a.seccion,
+      informe_nro:     informe,
+      texto:           texto.value,
+      ciclo_lectivo:   APP.cicloLectivo
+    }, function(res) {
+      if (res.ok) {
+        guardadas++;
+        var okEl = document.getElementById("obsOk_" + a.id_alumno);
+        if (okEl) { okEl.style.display = "inline"; setTimeout(function(){ okEl.style.display = "none"; }, 2500); }
+      } else { errores++; }
+      if (guardadas + errores === pendientes) {
+        if (errores === 0) toast("✅ Todas las observaciones guardadas (" + guardadas + ")");
+        else toast("⚠️ Guardadas: " + guardadas + " / Errores: " + errores);
+      }
+    });
   });
 }
 
@@ -1215,104 +1378,144 @@ function agregarEntradaHistorial(idLegajo, idAlumno) {
   });
 }
 
+var _legBusqTimer = null; // debounce timer
+var _legAlumnosCache = []; // caché local de alumnos para filtrar sin llamadas extra
+
 function abrirModalNuevoLegajo() {
-  LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""}; // limpiar selección previa
-  abrirModal("+ Nuevo Legajo EOE", `
-    <div class="form-group"><label class="form-label">Buscar alumno</label>
-      <input id="legBusqueda" class="form-control" placeholder="Apellido del alumno..." oninput="buscarAlumnoLegajo()">
-    </div>
-    <div id="legAlumnoResultados"></div>
-    <div id="legDatos" style="display:none">
-      <input type="hidden" id="legIdAlumno">
-      <input type="hidden" id="legNombreAlumno">
-      <div class="form-group"><label class="form-label">Motivo de apertura</label>
-        <textarea id="legMotivo" class="form-control" rows="2"></textarea></div>
-      <div class="form-group"><label class="form-label">Tipo</label>
-        <select id="legTipo" class="form-control">
-          <option>Seguimiento pedagógico</option><option>Problemática familiar</option>
-          <option>Salud</option><option>Ausentismo</option><option>Otro</option>
-        </select></div>
-    </div>`,
+  LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+  _legAlumnosCache = [];
+  abrirModal("+ Nuevo Legajo EOE",
+    '<div class="form-group"><label class="form-label">Buscar alumno *</label>' +
+      '<input id="legBusqueda" class="form-control" placeholder="Escribí el apellido..." oninput="buscarAlumnoLegajo()" autocomplete="off">' +
+    '</div>' +
+    '<div id="legAlumnoResultados" style="margin-bottom:10px"></div>' +
+    '<div id="legDatos" style="display:none">' +
+      '<div class="alert alert-success" id="legSelConfirm" style="margin-bottom:12px"></div>' +
+      '<div class="form-group"><label class="form-label">Motivo de apertura</label>' +
+        '<textarea id="legMotivo" class="form-control" rows="2"></textarea></div>' +
+      '<div class="form-group"><label class="form-label">Tipo</label>' +
+        '<select id="legTipo" class="form-control">' +
+          '<option>Seguimiento pedag\u00f3gico</option>' +
+          '<option>Problem\u00e1tica familiar</option>' +
+          '<option>Salud</option>' +
+          '<option>Ausentismo</option>' +
+          '<option>Otro</option>' +
+        '</select></div>' +
+    '</div>',
     [{label:"💾 Crear legajo", cls:"btn-primary", fn:"crearLegajoSubmit()"}]
   );
-}
-
-function buscarAlumnoLegajo() {
-  var q = v("legBusqueda").toLowerCase();
-  if (q.length < 2) return;
-  document.getElementById("legAlumnoResultados").innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:8px">Buscando...</div>';
+  // Pre-cargar todos los alumnos del ciclo en caché para filtrar localmente
   callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
-    var lista = (res.ok && res.data && res.data.length > 0) ? res.data : [];
-    if (lista.length === 0) {
-      // Intentar sin filtro de ciclo
-      callBackend("getAlumnos", {}, function(res2) {
-        mostrarResultadosLegajo((res2.ok && res2.data) ? res2.data : [], q);
-      });
-    } else {
-      mostrarResultadosLegajo(lista, q);
+    if (res.ok && res.data && res.data.length > 0) {
+      _legAlumnosCache = res.data;
     }
   });
 }
 
+function buscarAlumnoLegajo() {
+  // Si el alumno ya estaba seleccionado y el usuario vuelve a escribir, limpiar selección
+  if (LEGAJO_ALUMNO_SEL.id) {
+    LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+    var datosEl = document.getElementById("legDatos");
+    if (datosEl) datosEl.style.display = "none";
+  }
+
+  clearTimeout(_legBusqTimer);
+  var q = v("legBusqueda").trim().toLowerCase();
+  if (q.length < 2) {
+    var el = document.getElementById("legAlumnoResultados");
+    if (el) el.innerHTML = '';
+    return;
+  }
+
+  // Si ya tenemos caché, filtrar directo sin llamada al backend
+  if (_legAlumnosCache.length > 0) {
+    mostrarResultadosLegajo(_legAlumnosCache, q);
+    return;
+  }
+
+  // Sin caché: esperar 350ms para no lanzar una llamada por cada tecla
+  _legBusqTimer = setTimeout(function() {
+    var el = document.getElementById("legAlumnoResultados");
+    if (el) el.innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:8px">Buscando...</div>';
+    callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+      _legAlumnosCache = (res.ok && res.data) ? res.data : [];
+      // Leer el input DE NUEVO porque el valor puede haber cambiado mientras esperábamos
+      var qActual = v("legBusqueda").trim().toLowerCase();
+      if (qActual.length >= 2) mostrarResultadosLegajo(_legAlumnosCache, qActual);
+    });
+  }, 350);
+}
+
 function mostrarResultadosLegajo(lista, q) {
   var el = document.getElementById("legAlumnoResultados");
-  var filtrados = lista.filter(function(a){
+  if (!el) return;
+  var filtrados = lista.filter(function(a) {
     return (a.apellido + " " + a.nombre).toLowerCase().includes(q);
   }).slice(0, 8);
   if (filtrados.length === 0) {
-    el.innerHTML = '<div style="color:#999;font-size:13px;padding:8px">No se encontraron alumnos.</div>';
+    el.innerHTML = '<div style="color:#999;font-size:13px;padding:8px">No se encontraron alumnos con ese apellido.</div>';
     return;
   }
   el.innerHTML = "";
   filtrados.forEach(function(a) {
     var div = document.createElement("div");
-    div.style.padding = "10px 12px";
-    div.style.cursor = "pointer";
-    div.style.border = "1px solid #ddd";
-    div.style.borderRadius = "6px";
-    div.style.marginBottom = "6px";
-    div.style.background = "#fff";
-    div.style.transition = ".15s";
+    div.style.cssText = "padding:10px 12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;background:#fff;transition:.15s";
     div.innerHTML = "<b>" + a.apellido + ", " + a.nombre + "</b>"
       + " <span style='color:#999;font-size:12px'>— " + a.grado + "° " + a.seccion + "</span>";
-    div.onmouseover = function(){ this.style.background = "#fff5f5"; };
-    div.onmouseout  = function(){ this.style.background = "#fff"; };
-    (function(id, nombre, grado, sec){
-      div.onclick = function(){ seleccionarAlumnoLegajo(id, nombre, grado, sec); };
-    })(a.id_alumno, a.apellido + ", " + a.nombre, a.grado, a.seccion);
+    div.onmouseover = function(){ this.style.background = "#fff5f5"; this.style.borderColor = "var(--primary)"; };
+    div.onmouseout  = function(){ this.style.background = "#fff"; this.style.borderColor = "#ddd"; };
+    // Capturar todos los datos del alumno en el closure
+    (function(alumno) {
+      div.onclick = function() {
+        seleccionarAlumnoLegajo(
+          String(alumno.id_alumno),
+          alumno.apellido + ", " + alumno.nombre,
+          String(alumno.grado),
+          alumno.seccion
+        );
+      };
+    })(a);
     el.appendChild(div);
   });
 }
 
-
 function seleccionarAlumnoLegajo(id, nombre, grado, seccion) {
-  // Guardar en variable global (más confiable que inputs hidden en modal)
+  if (!id) { toast("Error: el alumno no tiene ID. Contactá al administrador."); return; }
   LEGAJO_ALUMNO_SEL = {id: id, nombre: nombre, grado: grado, seccion: seccion};
-  // También intentar escribir en los inputs si existen
-  var elId = document.getElementById("legIdAlumno");
-  var elNom = document.getElementById("legNombreAlumno");
-  if (elId) elId.value = id;
-  if (elNom) elNom.value = nombre;
-  // Mostrar confirmación
+  // Limpiar resultados y mostrar confirmación
   var resEl = document.getElementById("legAlumnoResultados");
-  if (resEl) resEl.innerHTML = '<div class="alert alert-success">✅ <b>' + nombre + '</b> — ' + grado + '° ' + seccion + '</div>';
+  if (resEl) resEl.innerHTML = '';
+  var buscEl = document.getElementById("legBusqueda");
+  if (buscEl) buscEl.value = nombre;
+  // Mostrar sección de datos del legajo con confirmación del alumno elegido
+  var confirmEl = document.getElementById("legSelConfirm");
+  if (confirmEl) confirmEl.innerHTML = '✅ Alumno seleccionado: <b>' + nombre + '</b> — ' + grado + '° ' + seccion;
   var datosEl = document.getElementById("legDatos");
   if (datosEl) datosEl.style.display = "block";
 }
 
 function crearLegajoSubmit() {
-  // Usar variable global como fuente principal, inputs como fallback
-  var idAlumno = LEGAJO_ALUMNO_SEL.id || v("legIdAlumno");
-  var nombreAlumno = LEGAJO_ALUMNO_SEL.nombre || v("legNombreAlumno");
-  if (!idAlumno) { toast("Primero buscá y seleccioná un alumno"); return; }
+  var idAlumno     = LEGAJO_ALUMNO_SEL.id;
+  var nombreAlumno = LEGAJO_ALUMNO_SEL.nombre;
+  if (!idAlumno) {
+    toast("⚠️ Primero buscá y hacé clic en un alumno de la lista");
+    // Destacar el campo de búsqueda
+    var bEl = document.getElementById("legBusqueda");
+    if (bEl) { bEl.style.borderColor = "var(--danger)"; setTimeout(function(){ bEl.style.borderColor = ""; }, 2000); }
+    return;
+  }
   callBackend("crearLegajo", {
-    id_alumno: idAlumno,
+    id_alumno:       idAlumno,
     apellido_nombre: nombreAlumno,
-    motivo: v("legMotivo"),
-    tipo: v("legTipo")
+    grado:           LEGAJO_ALUMNO_SEL.grado,
+    seccion:         LEGAJO_ALUMNO_SEL.seccion,
+    motivo:          v("legMotivo"),
+    tipo:            v("legTipo")
   }, function(res) {
     if (res.ok) {
-      LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""}; // limpiar
+      LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+      _legAlumnosCache = [];
       cerrarModal();
       toast("✅ Legajo creado");
       cargarLegajos();
