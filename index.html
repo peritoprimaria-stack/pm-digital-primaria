@@ -532,23 +532,42 @@ function renderDashboard() {
     });
   } else {
     callBackend("getEstadisticas", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
-      if (!res.ok) { document.getElementById("statsGrid").innerHTML = "<p>Error cargando stats</p>"; return; }
-      var data = res.data;
-      var totalAlumnos = data.reduce(function(s,d){return s+d.total_alumnos},0);
+      if (!res.ok) {
+        // Mostrar dashboard básico aunque falle estadísticas
+        document.getElementById("statsGrid").innerHTML =
+          statCard("🏫", APP.config.NOMBRE_ESCUELA || "Escuela", "Institución", "") +
+          statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "") +
+          statCard("👤", APP.usuario.nombre + " " + APP.usuario.apellido, "Director/a", "");
+        document.getElementById("dashAlerts").innerHTML =
+          '<div class="card"><div class="alert alert-info">📌 Sistema iniciado correctamente. Comenzá cargando alumnos en el módulo <b>Alumnos</b>.</div></div>';
+        return;
+      }
+      var data = res.data || [];
+      var totalAlumnos = data.reduce(function(s,d){return s+(d.total_alumnos||0)},0);
       var totalSecciones = data.length;
+      var promPct = data.length > 0
+        ? Math.round(data.reduce(function(s,d){return s+(d.promedio_asistencia_pct||0)},0)/data.length)
+        : 0;
       document.getElementById("statsGrid").innerHTML =
-        statCard("👨‍🎓", totalAlumnos, "Alumnos", "") +
-        statCard("🏫", totalSecciones, "Secciones activas", "") +
+        statCard("👨‍🎓", totalAlumnos || "0", "Alumnos", "") +
+        statCard("🏫", totalSecciones || "0", "Secciones activas", "") +
         statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "") +
-        statCard("📊", data.length > 0 ? Math.round(data.reduce(function(s,d){return s+d.promedio_asistencia_pct},0)/data.length) + "%" : "—", "Asistencia promedio", "");
+        statCard("📊", promPct > 0 ? promPct + "%" : "—", "Asistencia promedio", "");
 
-      // Tabla resumen por grado/sección
+      if (data.length === 0) {
+        document.getElementById("dashAlerts").innerHTML =
+          '<div class="card"><div class="alert alert-info">📌 Sistema listo. Comenzá cargando alumnos en el módulo <b>Alumnos</b>.</div></div>';
+        return;
+      }
+
       var tabla = '<div class="card"><div class="card-title">📊 Resumen por Sección</div><div class="table-container"><table class="data-table"><thead><tr><th>Grado</th><th>Sección</th><th>Alumnos</th><th>Asistencia</th></tr></thead><tbody>';
       data.forEach(function(d) {
-        var pct = d.promedio_asistencia_pct;
+        var pct = d.promedio_asistencia_pct || 0;
         var color = pct >= 80 ? "var(--success)" : "var(--danger)";
-        tabla += '<tr><td>' + d.grado + '°</td><td>' + d.seccion + '</td><td>' + d.total_alumnos + '</td>' +
-          '<td><div style="display:flex;align-items:center;gap:8px"><div class="progress"><div class="progress-bar '+(pct>=80?'ok':'risk')+'" style="width:'+pct+'%"></div></div><span style="color:'+color+';font-weight:600">'+pct+'%</span></div></td></tr>';
+        tabla += '<tr><td>' + d.grado + '°</td><td>' + d.seccion + '</td><td>' + d.total_alumnos + '</td>'
+          + '<td><div style="display:flex;align-items:center;gap:8px">'
+          + '<div class="progress"><div class="progress-bar ' + (pct>=80?'ok':'risk') + '" style="width:'+pct+'%"></div></div>'
+          + '<span style="color:'+color+';font-weight:600">'+pct+'%</span></div></td></tr>';
       });
       tabla += "</tbody></table></div></div>";
       document.getElementById("dashAlerts").innerHTML = tabla;
