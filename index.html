@@ -1384,11 +1384,40 @@ var _legAlumnosCache = []; // caché local de alumnos para filtrar sin llamadas 
 function abrirModalNuevoLegajo() {
   LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
   _legAlumnosCache = [];
+
+  var gradoOptions = [1,2,3,4,5,6].map(function(g) {
+    return '<option value="'+g+'">'+g+'°</option>';
+  }).join('');
+
   abrirModal("+ Nuevo Legajo EOE",
-    '<div class="form-group"><label class="form-label">Buscar alumno *</label>' +
-      '<input id="legBusqueda" class="form-control" placeholder="Escribí el apellido..." oninput="buscarAlumnoLegajo()" autocomplete="off">' +
+    // ── Paso 1: selector de curso ──
+    '<div class="form-grid" style="margin-bottom:12px">' +
+      '<div class="form-group">' +
+        '<label class="form-label">Grado *</label>' +
+        '<select id="legGradoSel" class="form-control" onchange="filtrarAlumnosPorCurso()">' +
+          '<option value="">— Seleccioná —</option>' +
+          gradoOptions +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Sección *</label>' +
+        '<select id="legSeccionSel" class="form-control" onchange="filtrarAlumnosPorCurso()">' +
+          '<option value="">— Seleccioná —</option>' +
+          '<option value="A">A</option>' +
+          '<option value="B">B</option>' +
+        '</select>' +
+      '</div>' +
     '</div>' +
-    '<div id="legAlumnoResultados" style="margin-bottom:10px"></div>' +
+    // ── Paso 2: selector de alumno (aparece al elegir curso) ──
+    '<div id="legAlumnoSelectorWrap" style="display:none;margin-bottom:12px">' +
+      '<div class="form-group">' +
+        '<label class="form-label">Alumno/a *</label>' +
+        '<select id="legAlumnoSel" class="form-control" onchange="seleccionarAlumnoDesdeSel()">' +
+          '<option value="">— Seleccioná un alumno —</option>' +
+        '</select>' +
+      '</div>' +
+    '</div>' +
+    // ── Datos del legajo (aparecen tras seleccionar alumno) ──
     '<div id="legDatos" style="display:none">' +
       '<div class="alert alert-success" id="legSelConfirm" style="margin-bottom:12px"></div>' +
       '<div class="form-group"><label class="form-label">Motivo de apertura</label>' +
@@ -1404,22 +1433,88 @@ function abrirModalNuevoLegajo() {
     '</div>',
     [{label:"💾 Crear legajo", cls:"btn-primary", fn:"crearLegajoSubmit()"}]
   );
-  // Pre-cargar todos los alumnos del ciclo en caché para filtrar localmente
+
+  // Pre-cargar todos los alumnos en caché para filtrar localmente
   callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
     if (res.ok && res.data && res.data.length > 0) {
       _legAlumnosCache = res.data;
+    } else {
+      // Fallback: intentar sin filtro de ciclo
+      callBackend("getAlumnos", {}, function(res2) {
+        if (res2.ok && res2.data) _legAlumnosCache = res2.data;
+      });
     }
   });
 }
 
+function filtrarAlumnosPorCurso() {
+  // Limpiar selección anterior si el usuario cambia curso
+  LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+  var datosEl = document.getElementById("legDatos");
+  if (datosEl) datosEl.style.display = "none";
+
+  var grado   = v("legGradoSel");
+  var seccion = v("legSeccionSel");
+  var wrap    = document.getElementById("legAlumnoSelectorWrap");
+  var selEl   = document.getElementById("legAlumnoSel");
+  if (!grado || !seccion) {
+    if (wrap)  wrap.style.display  = "none";
+    return;
+  }
+
+  // Filtrar caché local
+  var filtrados = _legAlumnosCache.filter(function(a) {
+    return String(a.grado) === String(grado) && String(a.seccion).toUpperCase() === seccion.toUpperCase();
+  });
+
+  // Construir opciones
+  selEl.innerHTML = '<option value="">— Seleccioná un alumno —</option>';
+  if (filtrados.length === 0) {
+    selEl.innerHTML += '<option value="" disabled>No hay alumnos en este curso</option>';
+  } else {
+    filtrados.sort(function(a,b){ return (a.apellido+a.nombre).localeCompare(b.apellido+b.nombre); });
+    filtrados.forEach(function(a) {
+      var opt = document.createElement("option");
+      opt.value = JSON.stringify({id: String(a.id_alumno), nombre: a.apellido+", "+a.nombre, grado: String(a.grado), seccion: a.seccion});
+      opt.textContent = a.apellido + ", " + a.nombre;
+      selEl.appendChild(opt);
+    });
+  }
+
+  if (wrap) wrap.style.display = "block";
+
+  // Si el caché está vacío pedirlo ahora (primera vez sin internet rápido)
+  if (_legAlumnosCache.length === 0) {
+    selEl.innerHTML = '<option value="" disabled>Cargando alumnos...</option>';
+    callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+      _legAlumnosCache = (res.ok && res.data) ? res.data : [];
+      // Reintentar con los datos frescos
+      filtrarAlumnosPorCurso();
+    });
+  }
+}
+
+function seleccionarAlumnoDesdeSel() {
+  var raw = v("legAlumnoSel");
+  if (!raw) {
+    var datosEl = document.getElementById("legDatos");
+    if (datosEl) datosEl.style.display = "none";
+    LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+    return;
+  }
+  try {
+    var alumno = JSON.parse(raw);
+    seleccionarAlumnoLegajo(alumno.id, alumno.nombre, alumno.grado, alumno.seccion);
+  } catch(e) { /* valor inválido */ }
+}
+
 function buscarAlumnoLegajo() {
-  // Si el alumno ya estaba seleccionado y el usuario vuelve a escribir, limpiar selección
+  // Función mantenida por compatibilidad (ya no se usa en el nuevo modal)
   if (LEGAJO_ALUMNO_SEL.id) {
     LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
     var datosEl = document.getElementById("legDatos");
     if (datosEl) datosEl.style.display = "none";
   }
-
   clearTimeout(_legBusqTimer);
   var q = v("legBusqueda").trim().toLowerCase();
   if (q.length < 2) {
@@ -1427,20 +1522,15 @@ function buscarAlumnoLegajo() {
     if (el) el.innerHTML = '';
     return;
   }
-
-  // Si ya tenemos caché, filtrar directo sin llamada al backend
   if (_legAlumnosCache.length > 0) {
     mostrarResultadosLegajo(_legAlumnosCache, q);
     return;
   }
-
-  // Sin caché: esperar 350ms para no lanzar una llamada por cada tecla
   _legBusqTimer = setTimeout(function() {
     var el = document.getElementById("legAlumnoResultados");
     if (el) el.innerHTML = '<div style="color:var(--text-light);font-size:13px;padding:8px">Buscando...</div>';
     callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
       _legAlumnosCache = (res.ok && res.data) ? res.data : [];
-      // Leer el input DE NUEVO porque el valor puede haber cambiado mientras esperábamos
       var qActual = v("legBusqueda").trim().toLowerCase();
       if (qActual.length >= 2) mostrarResultadosLegajo(_legAlumnosCache, qActual);
     });
