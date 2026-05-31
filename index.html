@@ -1253,26 +1253,33 @@ function buscarAlumnoLegajo() {
 }
 
 function mostrarResultadosLegajo(lista, q) {
+  var el = document.getElementById("legAlumnoResultados");
   var filtrados = lista.filter(function(a){
-    return (a.apellido+" "+a.nombre).toLowerCase().includes(q);
+    return (a.apellido + " " + a.nombre).toLowerCase().includes(q);
   }).slice(0, 8);
   if (filtrados.length === 0) {
-    document.getElementById("legAlumnoResultados").innerHTML =
-      '<div style="color:var(--text-light);font-size:13px;padding:8px">No se encontraron alumnos.</div>';
+    el.innerHTML = '<div style="color:#999;font-size:13px;padding:8px">No se encontraron alumnos.</div>';
     return;
   }
-  var html = filtrados.map(function(a) {
-    var id = a.id_alumno;
-    var nombre = a.apellido + ", " + a.nombre;
-    var grado = a.grado;
-    var sec = a.seccion;
-    return '<div style="padding:10px 12px;cursor:pointer;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;background:#fff" '
-      + 'onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background='#fff'" '
-      + 'onclick="seleccionarAlumnoLegajo('' + id + '','' + nombre + '','' + grado + '','' + sec + '')">'
-      + '<b>' + a.apellido + ', ' + a.nombre + '</b> <span style="color:#999;font-size:12px">— ' + grado + '° ' + sec + '</span>'
-      + '</div>';
-  }).join("");
-  document.getElementById("legAlumnoResultados").innerHTML = html;
+  el.innerHTML = "";
+  filtrados.forEach(function(a) {
+    var div = document.createElement("div");
+    div.style.padding = "10px 12px";
+    div.style.cursor = "pointer";
+    div.style.border = "1px solid #ddd";
+    div.style.borderRadius = "6px";
+    div.style.marginBottom = "6px";
+    div.style.background = "#fff";
+    div.style.transition = ".15s";
+    div.innerHTML = "<b>" + a.apellido + ", " + a.nombre + "</b>"
+      + " <span style='color:#999;font-size:12px'>— " + a.grado + "° " + a.seccion + "</span>";
+    div.onmouseover = function(){ this.style.background = "#fff5f5"; };
+    div.onmouseout  = function(){ this.style.background = "#fff"; };
+    (function(id, nombre, grado, sec){
+      div.onclick = function(){ seleccionarAlumnoLegajo(id, nombre, grado, sec); };
+    })(a.id_alumno, a.apellido + ", " + a.nombre, a.grado, a.seccion);
+    el.appendChild(div);
+  });
 }
 
 
