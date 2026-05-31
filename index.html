@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PM Digital — Educación Primaria</title>
 <meta name="theme-color" content="#1565C0">
-<link rel="manifest" href="manifest.json">
+
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -1533,28 +1533,33 @@ function mostrarError(msg) {
 // ════════════════════════════════════════════════════════════
 function callBackend(accion, data, callback) {
   var token = APP.usuario ? APP.usuario.email : "";
-  var payload = Object.assign({}, data, {accion: accion, token: token});
-
-  fetch(BACKEND_URL, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload)
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(json){ callback(json); })
-  .catch(function(err){
-    // Fallback JSONP para GET simple
-    if (["getConfig","verificarUsuario","ping"].includes(accion)) {
-      var url = BACKEND_URL + "?accion=" + accion + "&token=" + encodeURIComponent(token);
-      Object.keys(data).forEach(function(k){ url += "&"+k+"="+encodeURIComponent(data[k]||""); });
-      var cb = "cb_" + Date.now();
-      window[cb] = function(json){ delete window[cb]; callback(json); };
-      var s = document.createElement("script");
-      s.src = url + "&callback=" + cb;
-      document.head.appendChild(s);
-    } else {
-      callback({ok:false, error: "Error de red: " + err.message});
-    }
+  
+  // Construir URL con parámetros GET (evita CORS con Apps Script)
+  var params = Object.assign({}, data, {accion: accion, token: token});
+  var qs = Object.keys(params).map(function(k) {
+    var val = params[k];
+    if (typeof val === "object") val = JSON.stringify(val);
+    return encodeURIComponent(k) + "=" + encodeURIComponent(val || "");
+  }).join("&");
+  
+  var url = BACKEND_URL + "?" + qs;
+  
+  fetch(url, { method: "GET", redirect: "follow" })
+  .then(function(r) { return r.json(); })
+  .then(function(json) { callback(json); })
+  .catch(function(err) {
+    // Fallback JSONP
+    var cb = "cb_" + Date.now();
+    window[cb] = function(json) { delete window[cb]; callback(json); };
+    var s = document.createElement("script");
+    s.src = url + "&callback=" + cb;
+    document.head.appendChild(s);
+    setTimeout(function() {
+      if (window[cb]) {
+        delete window[cb];
+        callback({ok: false, error: "Timeout - reintentá"});
+      }
+    }, 15000);
   });
 }
 </script>
