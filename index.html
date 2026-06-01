@@ -1052,6 +1052,80 @@ function crearAlumnoSubmit() {
   });
 }
 
+function abrirModalEditarAlumno(al) {
+  // Se renderiza el formulario vacío y luego se setean los valores por JS
+  // para evitar problemas con comillas en los datos del alumno
+  abrirModal("✏️ Editar — " + al.apellido + ", " + al.nombre,
+    '<div class="form-grid">' +
+      '<div class="form-group"><label class="form-label">Apellido *</label><input id="eApellido" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Nombre *</label><input id="eNombre" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">DNI</label><input id="eDni" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Fecha nacimiento</label><input id="eFechaNac" type="date" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Grado *</label>' +
+        '<select id="eGrado" class="form-control">' +
+          [1,2,3,4,5,6].map(function(g){ return "<option value=\""+g+"\">"+g+"°</option>"; }).join("") +
+        '</select></div>' +
+      '<div class="form-group"><label class="form-label">Sección *</label>' +
+        '<select id="eSeccion" class="form-control">' +
+          '<option value="A">A</option><option value="B">B</option>' +
+        '</select></div>' +
+      '<div class="form-group"><label class="form-label">Domicilio</label><input id="eDomicilio" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Lugar nacimiento</label><input id="eLugar" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Responsable</label><input id="eResponsable" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Tel. Responsable</label><input id="eTelResp" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Email</label><input id="eEmailResp" type="email" class="form-control"></div>' +
+      '<div class="form-group"><label class="form-label">Obra social</label><input id="eObraSocial" class="form-control"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Obs. médicas</label><textarea id="eObsMed" class="form-control" rows="2"></textarea></div>' +
+    '<input type="hidden" id="eIdAlumno">',
+    [{label:"💾 Guardar cambios", cls:"btn-primary", fn:"editarAlumnoSubmit()"}]
+  );
+  // Setear valores de forma segura (evita problemas con comillas en los datos)
+  var sv = function(id, val) { var el = document.getElementById(id); if (el) el.value = val || ""; };
+  sv("eApellido",    al.apellido);
+  sv("eNombre",      al.nombre);
+  sv("eDni",         al.dni);
+  sv("eFechaNac",    al.fecha_nacimiento);
+  sv("eGrado",       al.grado);
+  sv("eSeccion",     al.seccion);
+  sv("eDomicilio",   al.domicilio);
+  sv("eLugar",       al.lugar_nacimiento);
+  sv("eResponsable", al.nombre_responsable);
+  sv("eTelResp",     al.telefono_responsable);
+  sv("eEmailResp",   al.email_responsable);
+  sv("eObraSocial",  al.obra_social);
+  sv("eObsMed",      al.observaciones_medicas);
+  sv("eIdAlumno",    al.id_alumno);
+}
+
+function editarAlumnoSubmit() {
+  var data = {
+    id_alumno:             v("eIdAlumno"),
+    apellido:              v("eApellido"),
+    nombre:                v("eNombre"),
+    dni:                   v("eDni"),
+    fecha_nacimiento:      v("eFechaNac"),
+    lugar_nacimiento:      v("eLugar"),
+    domicilio:             v("eDomicilio"),
+    grado:                 v("eGrado"),
+    seccion:               v("eSeccion"),
+    nombre_responsable:    v("eResponsable"),
+    telefono_responsable:  v("eTelResp"),
+    email_responsable:     v("eEmailResp"),
+    obra_social:           v("eObraSocial"),
+    observaciones_medicas: v("eObsMed"),
+    ciclo_lectivo:         APP.cicloLectivo
+  };
+  if (!data.apellido || !data.nombre) { toast("Apellido y nombre son obligatorios"); return; }
+  callBackend("actualizarAlumno", data, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("\u2705 Alumno actualizado");
+      cargarAlumnos();
+    } else toast("\u274C " + res.error);
+  });
+}
+
 // ════════════════════════════════════════════════════════════
 // BOLETÍN
 // ════════════════════════════════════════════════════════════
