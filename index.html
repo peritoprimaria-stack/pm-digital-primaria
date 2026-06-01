@@ -10,6 +10,7 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 
 <style>
 /* ── RESET & BASE ─────────────────────────────────────── */
@@ -1261,15 +1262,171 @@ function guardarTodasObs() {
   });
 }
 
+// URL del PDF oficial del boletín (hosted en GitHub o Drive público)
+// Reemplazar con la URL real donde esté alojado BOLETIN_PRIMER_CICLO.pdf
+var BOLETIN_PDF_URL_1ER_CICLO = "https://raw.githubusercontent.com/peritoprimaria-stack/pm-digital-primaria/main/BOLETIN_PRIMER_CICLO.pdf";
+
 function verBoletin(id_alumno) {
   toast("Generando boletín...");
   callBackend("generarBoletin", {id_alumno: id_alumno, ciclo_lectivo: APP.cicloLectivo}, function(res) {
-    if (res.ok) {
+    if (!res.ok) { toast("❌ " + res.error); return; }
+
+    var d = res.data.datos_pdf;
+    if (!d || !d.es_primer_ciclo) {
+      // 2do ciclo: abrir HTML como antes (pendiente de implementar PDF 2do ciclo)
       var win = window.open("", "_blank");
       win.document.write(res.data.html);
       win.document.close();
-    } else toast("❌ " + res.error);
+      return;
+    }
+
+    // 1er ciclo: generar PDF oficial
+    generarBoletinPDFOficial(d, res.data.alumno);
   });
+}
+
+async function generarBoletinPDFOficial(d, alumno) {
+  try {
+    var { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+    // Cargar el PDF base
+    var resp = await fetch(BOLETIN_PDF_URL_1ER_CICLO);
+    if (!resp.ok) throw new Error("No se pudo cargar el PDF base");
+    var pdfBytes = await resp.arrayBuffer();
+
+    var pdfDoc = await PDFDocument.load(pdfBytes);
+    var font   = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    var pages  = pdfDoc.getPages();
+
+    // Dimensiones reales del PDF (909.495 x 663.449 pt)
+    var PW = 909.495;
+    var PH = 663.449;
+
+    // Helper: escribe texto en coordenadas top-down (y=0 arriba)
+    function drawText(pageIdx, x, topY, text, size, color) {
+      if (!text || pageIdx >= pages.length) return;
+      var page = pages[pageIdx];
+      var pdfY = PH - topY - size; // convertir a PDF coords (y=0 abajo)
+      try {
+        page.drawText(String(text), {
+          x: x, y: pdfY,
+          size: size || 8,
+          font: font,
+          color: color || rgb(0,0,0),
+          maxWidth: 0
+        });
+      } catch(e) { console.warn("drawText error:", e); }
+    }
+
+    // Helper: texto que puede ser largo (observaciones), con ajuste de líneas básico
+    function drawTextWrap(pageIdx, x, topY, maxW, text, size) {
+      if (!text || pageIdx >= pages.length) return;
+      var words = text.split(' ');
+      var line  = '';
+      var lineH = size * 1.4;
+      var curY  = topY;
+      var maxLines = 6;
+      var lineCount = 0;
+      words.forEach(function(w) {
+        var test = line + (line ? ' ' : '') + w;
+        // Estimación ancho: ~0.55 * size por carácter
+        if (test.length * size * 0.55 > maxW && line) {
+          drawText(pageIdx, x, curY, line, size);
+          line  = w;
+          curY += lineH;
+          lineCount++;
+          if (lineCount >= maxLines) { line = ''; return; }
+        } else { line = test; }
+      });
+      if (line && lineCount < maxLines) drawText(pageIdx, x, curY, line, size);
+    }
+
+    // ── PÁGINA 1: Datos del alumno ───────────────────────────
+    var p1 = 0; // índice 0-based
+    var fs = 8;
+    drawText(p1, 661, 170, d.apellido,         fs);
+    drawText(p1, 661, 200, d.nombre,           fs);
+    drawText(p1, 661, 230, d.dni,              fs);
+    drawText(p1, 661, 260, d.fecha_nacimiento, fs);
+    drawText(p1, 661, 290, d.lugar_nacimiento, fs);
+    drawText(p1, 661, 320, d.domicilio,        fs);
+    drawText(p1, 661, 350, d.establecimiento,  7.5);
+    drawText(p1, 661, 380, d.domicilio_escuela,fs);
+    drawText(p1, 661, 410, d.distrito,         fs);
+
+    // ── PÁGINAS 2-6: Calificaciones ──────────────────────────
+    // Página 2 = Año 1° (trimestres 1-2-3)
+    var COL = { i1:157, i2:220, i3:282, i4:157, i5:220, i6:282, pe:344, if_:407 };
+    var FILAS = {
+      PRACTICAS_LENGUAJE: 137,
+      MATEMATICA:         166,
+      CIENCIAS_SOCIALES:  193,
+      CIENCIAS_NATURALES: 220,
+      ED_ARTISTICA:       247,
+      ED_FISICA:          274
+    };
+    var AREAS = ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"];
+
+    function dibujarCalificaciones(pageIdx, cicloLabel, seccion, califs, cols, obs1key, obs2key, obs3key) {
+      // Encabezado
+      drawText(pageIdx, 254, 67, d.ciclo_lectivo, 8);
+      drawText(pageIdx, 378, 67, seccion,          8);
+      // Materias
+      AREAS.forEach(function(area) {
+        var fila = FILAS[area];
+        var c    = califs[area] || {};
+        if (c.i1) drawText(pageIdx, COL[cols[0]]-10, fila, c.i1, 8);
+        if (c.i2) drawText(pageIdx, COL[cols[1]]-10, fila, c.i2, 8);
+        if (c.i3) drawText(pageIdx, COL[cols[2]]-10, fila, c.i3, 8);
+        if (c.pe) drawText(pageIdx, COL.pe -10,      fila, c.pe, 8);
+        if (c.if_)drawText(pageIdx, COL.if_-10,      fila, c.if_,8);
+      });
+      // Inasistencias
+      drawText(pageIdx, COL[cols[0]]-10, 337, d.inasistencias, 8);
+      // Observaciones (lado derecho)
+      drawTextWrap(pageIdx, 492, 158, 408, d.observaciones[obs1key], 6.5);
+      drawTextWrap(pageIdx, 492, 235, 408, d.observaciones[obs2key], 6.5);
+      drawTextWrap(pageIdx, 492, 314, 408, d.observaciones[obs3key], 6.5);
+    }
+
+    // Páginas 2 y 3 son el 1° año (la tabla está en ambas caras del díptico)
+    dibujarCalificaciones(1, d.ciclo_lectivo, d.seccion, d.calificaciones,
+      ["i1","i2","i3"], "obs_1","obs_2","obs_3");
+    dibujarCalificaciones(2, d.ciclo_lectivo, d.seccion, d.calificaciones,
+      ["i1","i2","i3"], "obs_1","obs_2","obs_3");
+
+    // Páginas 4-5 (2° año en el PDF real — se deja en blanco si no hay datos de 2° año)
+    // Páginas 4-6 quedan sin datos del alumno (son para otros años del ciclo)
+
+    // ── Descargar el PDF generado ────────────────────────────
+    var pdfBytesOut = await pdfDoc.save();
+    var blob = new Blob([pdfBytesOut], { type: 'application/pdf' });
+    var url  = URL.createObjectURL(blob);
+    var nombreArchivo = 'boletin_' + (alumno.apellido||'').replace(/\s+/g,'_').toLowerCase()
+                      + '_' + d.ciclo_lectivo + '.pdf';
+
+    var a = document.createElement('a');
+    a.href     = url;
+    a.download = nombreArchivo;
+    a.target   = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+
+    toast("✅ Boletín PDF descargado");
+  } catch(err) {
+    console.error("Error generando PDF:", err);
+    // Fallback: abrir HTML si falla la generación del PDF
+    toast("⚠️ Abriendo boletín en pantalla (no se pudo generar PDF)");
+    callBackend("generarBoletin", {id_alumno: alumno.id_alumno, ciclo_lectivo: APP.cicloLectivo}, function(res) {
+      if (res.ok) {
+        var win = window.open("", "_blank");
+        win.document.write(res.data.html);
+        win.document.close();
+      }
+    });
+  }
 }
 
 // ════════════════════════════════════════════════════════════
