@@ -1416,8 +1416,8 @@ async function generarBoletinPDFOficial(d, alumno) {
 
     function dibujarPagina(pageIdx, FY, areas) {
       // Encabezado: ciclo lectivo (2 dígitos) y sección
-      txt(pageIdx, 258, 64, d.ciclo_lectivo.toString().slice(-2), 8);
-      txt(pageIdx, 378, 64, d.seccion, 8);
+      txt(pageIdx, 258, 64, d.ciclo_lectivo.toString().slice(-2), 10);
+      txt(pageIdx, 378, 64, d.seccion, 10);
       // Calificaciones
       areas.forEach(function(area) {
         var cal = d.calificaciones[area] || {};
@@ -1431,11 +1431,11 @@ async function generarBoletinPDFOficial(d, alumno) {
       // Inasistencias
       txt(pageIdx, CI.i1 - 6, esPrimerCiclo ? 334 : 361, d.inasistencias, 8);
       // Observaciones
-      txtWrap(pageIdx, 492, 175, 408, d.observaciones.obs_1,     7);
-      txtWrap(pageIdx, 492, 258, 408, d.observaciones.obs_2,     7);
-      txtWrap(pageIdx, 492, 338, 408, d.observaciones.obs_3,     7);
-      txtWrap(pageIdx, 492, 415, 408, d.observaciones.obs_pe,    7);
-      txtWrap(pageIdx, 492, 490, 408, d.observaciones.obs_final, 7);
+      txtWrap(pageIdx, 492, 182, 408, d.observaciones.obs_1,     8.5);
+      txtWrap(pageIdx, 492, 265, 408, d.observaciones.obs_2,     8.5);
+      txtWrap(pageIdx, 492, 345, 408, d.observaciones.obs_3,     8.5);
+      txtWrap(pageIdx, 492, 422, 408, d.observaciones.obs_pe,    8.5);
+      txtWrap(pageIdx, 492, 497, 408, d.observaciones.obs_final, 8.5);
     }
 
     if (esPrimerCiclo) {
