@@ -1298,105 +1298,109 @@ async function generarBoletinPDFOficial(d, alumno) {
     var font   = await pdfDoc.embedFont(StandardFonts.Helvetica);
     var pages  = pdfDoc.getPages();
 
-    // Dimensiones reales del PDF (909.495 x 663.449 pt)
-    var PW = 909.495;
-    var PH = 663.449;
+    var PH = 663.449; // alto real de cada página en puntos
 
-    // Helper: escribe texto en coordenadas top-down (y=0 arriba)
-    function drawText(pageIdx, x, topY, text, size, color) {
+    // Helper: escribe texto en coordenadas top-down (y=0 arriba de la página)
+    function txt(pageIdx, x, topY, text, size) {
       if (!text || pageIdx >= pages.length) return;
-      var page = pages[pageIdx];
-      var pdfY = PH - topY - size; // convertir a PDF coords (y=0 abajo)
-      try {
-        page.drawText(String(text), {
-          x: x, y: pdfY,
-          size: size || 8,
-          font: font,
-          color: color || rgb(0,0,0),
-          maxWidth: 0
-        });
-      } catch(e) { console.warn("drawText error:", e); }
+      var s = size || 8;
+      pages[pageIdx].drawText(String(text), {
+        x: x,
+        y: PH - topY - s,
+        size: s,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
     }
 
-    // Helper: texto que puede ser largo (observaciones), con ajuste de líneas básico
-    function drawTextWrap(pageIdx, x, topY, maxW, text, size) {
+    // Helper: texto largo con word-wrap manual
+    // charW: ancho estimado por carácter = size * 0.52
+    function txtWrap(pageIdx, x, topY, maxW, text, size) {
       if (!text || pageIdx >= pages.length) return;
-      var words = text.split(' ');
-      var line  = '';
-      var lineH = size * 1.4;
-      var curY  = topY;
-      var maxLines = 6;
-      var lineCount = 0;
+      var s      = size || 7;
+      var charW  = s * 0.52;
+      var lineH  = s * 1.5;
+      var maxCh  = Math.floor(maxW / charW);
+      var words  = text.split(' ');
+      var line   = '';
+      var curY   = topY;
+      var maxL   = 5; // máximo de líneas por bloque
+      var lCount = 0;
       words.forEach(function(w) {
-        var test = line + (line ? ' ' : '') + w;
-        // Estimación ancho: ~0.55 * size por carácter
-        if (test.length * size * 0.55 > maxW && line) {
-          drawText(pageIdx, x, curY, line, size);
+        if (lCount >= maxL) return;
+        var test = line ? line + ' ' + w : w;
+        if (test.length > maxCh && line) {
+          txt(pageIdx, x, curY, line, s);
           line  = w;
           curY += lineH;
-          lineCount++;
-          if (lineCount >= maxLines) { line = ''; return; }
-        } else { line = test; }
+          lCount++;
+        } else {
+          line = test;
+        }
       });
-      if (line && lineCount < maxLines) drawText(pageIdx, x, curY, line, size);
+      if (line && lCount < maxL) txt(pageIdx, x, curY, line, s);
     }
 
-    // ── PÁGINA 1: Datos del alumno ───────────────────────────
-    var p1 = 0; // índice 0-based
-    var fs = 8;
-    drawText(p1, 661, 170, d.apellido,         fs);
-    drawText(p1, 661, 200, d.nombre,           fs);
-    drawText(p1, 661, 230, d.dni,              fs);
-    drawText(p1, 661, 260, d.fecha_nacimiento, fs);
-    drawText(p1, 661, 290, d.lugar_nacimiento, fs);
-    drawText(p1, 661, 320, d.domicilio,        fs);
-    drawText(p1, 661, 350, d.establecimiento,  7.5);
-    drawText(p1, 661, 380, d.domicilio_escuela,fs);
-    drawText(p1, 661, 410, d.distrito,         fs);
+    // ── PÁGINA 1 (índice 0): Datos del alumno ──────────────────
+    // Los campos están en la mitad derecha de la página (x > 651)
+    // Cada campo tiene su propia fila Y
+    var P1 = 0;
+    txt(P1, 653, 168, d.apellido,          8);
+    txt(P1, 653, 198, d.nombre,            8);
+    txt(P1, 653, 228, d.dni,               8);
+    txt(P1, 653, 258, d.fecha_nacimiento,  8);
+    txt(P1, 653, 288, d.lugar_nacimiento,  8);
+    txt(P1, 653, 318, d.domicilio,         8);
+    txt(P1, 653, 348, d.establecimiento,   7.5);
+    txt(P1, 653, 378, d.domicilio_escuela, 8);
+    txt(P1, 653, 408, d.distrito,          8);
 
-    // ── PÁGINAS 2-6: Calificaciones ──────────────────────────
-    // Página 2 = Año 1° (trimestres 1-2-3)
-    var COL = { i1:157, i2:220, i3:282, i4:157, i5:220, i6:282, pe:344, if_:407 };
-    var FILAS = {
-      PRACTICAS_LENGUAJE: 137,
-      MATEMATICA:         166,
-      CIENCIAS_SOCIALES:  193,
-      CIENCIAS_NATURALES: 220,
-      ED_ARTISTICA:       247,
-      ED_FISICA:          274
+    // ── PÁGINA 2 (índice 1): 1° año — tabla calificaciones ─────
+    // Solo se completa para alumno de 1° grado
+    var P2 = 1;
+    var grado = parseInt(d.grado);
+
+    // Ciclo lectivo y sección (encabezado)
+    // "CICLO LECTIVO 20___" — el "20" ya está impreso, escribimos solo los 2 dígitos finales
+    txt(P2, 258, 64, d.ciclo_lectivo.toString().slice(-2), 8);
+    txt(P2, 378, 64, d.seccion, 8);
+
+    // Columnas X del centro de cada celda de informe
+    var CI = { i1:160, i2:222, i3:284, pe:346, if_:409 };
+
+    // Filas Y de cada área (top-down)
+    var FY = {
+      PRACTICAS_LENGUAJE: 136,
+      MATEMATICA:         163,
+      CIENCIAS_SOCIALES:  190,
+      CIENCIAS_NATURALES: 217,
+      ED_ARTISTICA:       244,
+      ED_FISICA:          271
     };
-    var AREAS = ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"];
 
-    function dibujarCalificaciones(pageIdx, cicloLabel, seccion, califs, cols, obs1key, obs2key, obs3key) {
-      // Encabezado
-      drawText(pageIdx, 254, 67, d.ciclo_lectivo, 8);
-      drawText(pageIdx, 378, 67, seccion,          8);
-      // Materias
-      AREAS.forEach(function(area) {
-        var fila = FILAS[area];
-        var c    = califs[area] || {};
-        if (c.i1) drawText(pageIdx, COL[cols[0]]-10, fila, c.i1, 8);
-        if (c.i2) drawText(pageIdx, COL[cols[1]]-10, fila, c.i2, 8);
-        if (c.i3) drawText(pageIdx, COL[cols[2]]-10, fila, c.i3, 8);
-        if (c.pe) drawText(pageIdx, COL.pe -10,      fila, c.pe, 8);
-        if (c.if_)drawText(pageIdx, COL.if_-10,      fila, c.if_,8);
-      });
-      // Inasistencias
-      drawText(pageIdx, COL[cols[0]]-10, 337, d.inasistencias, 8);
-      // Observaciones (lado derecho)
-      drawTextWrap(pageIdx, 492, 158, 408, d.observaciones[obs1key], 6.5);
-      drawTextWrap(pageIdx, 492, 235, 408, d.observaciones[obs2key], 6.5);
-      drawTextWrap(pageIdx, 492, 314, 408, d.observaciones[obs3key], 6.5);
-    }
+    ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES",
+     "CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"].forEach(function(area) {
+      var c = d.calificaciones[area] || {};
+      var y = FY[area];
+      if (c.i1)  txt(P2, CI.i1  - 6, y, c.i1,  8);
+      if (c.i2)  txt(P2, CI.i2  - 6, y, c.i2,  8);
+      if (c.i3)  txt(P2, CI.i3  - 6, y, c.i3,  8);
+      if (c.pe)  txt(P2, CI.pe  - 6, y, c.pe,  8);
+      if (c.if_) txt(P2, CI.if_ - 6, y, c.if_, 8);
+    });
 
-    // Páginas 2 y 3 son el 1° año (la tabla está en ambas caras del díptico)
-    dibujarCalificaciones(1, d.ciclo_lectivo, d.seccion, d.calificaciones,
-      ["i1","i2","i3"], "obs_1","obs_2","obs_3");
-    dibujarCalificaciones(2, d.ciclo_lectivo, d.seccion, d.calificaciones,
-      ["i1","i2","i3"], "obs_1","obs_2","obs_3");
+    // Inasistencias (fila debajo de Ed. Física)
+    txt(P2, CI.i1 - 6, 334, d.inasistencias, 8);
 
-    // Páginas 4-5 (2° año en el PDF real — se deja en blanco si no hay datos de 2° año)
-    // Páginas 4-6 quedan sin datos del alumno (son para otros años del ciclo)
+    // Observaciones — lado derecho
+    // Cada bloque ocupa aprox 65pt de alto; X arrancan en 492, ancho ~408pt
+    txtWrap(P2, 492, 155, 408, d.observaciones.obs_1,  7);
+    txtWrap(P2, 492, 232, 408, d.observaciones.obs_2,  7);
+    txtWrap(P2, 492, 310, 408, d.observaciones.obs_3,  7);
+    txtWrap(P2, 492, 388, 408, d.observaciones.obs_pe, 7);
+    txtWrap(P2, 492, 465, 408, d.observaciones.obs_final, 7);
+
+    // Páginas 3-6: NO se tocan (son para 2° y 3° año del ciclo)
 
     // ── Descargar el PDF generado ────────────────────────────
     var pdfBytesOut = await pdfDoc.save();
