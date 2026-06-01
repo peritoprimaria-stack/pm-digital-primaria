@@ -1262,25 +1262,15 @@ function guardarTodasObs() {
   });
 }
 
-// URL del PDF oficial del boletín (hosted en GitHub o Drive público)
-// Reemplazar con la URL real donde esté alojado BOLETIN_PRIMER_CICLO.pdf
 var BOLETIN_PDF_URL_1ER_CICLO = "https://raw.githubusercontent.com/peritoprimaria-stack/pm-digital-primaria/main/BOLETIN_PRIMER_CICLO.pdf";
+var BOLETIN_PDF_URL_2DO_CICLO = "https://raw.githubusercontent.com/peritoprimaria-stack/pm-digital-primaria/main/boletin_digital_segundo_ciclo.pdf";
 
 function verBoletin(id_alumno) {
   toast("Generando boletín...");
   callBackend("generarBoletin", {id_alumno: id_alumno, ciclo_lectivo: APP.cicloLectivo}, function(res) {
     if (!res.ok) { toast("❌ " + res.error); return; }
-
     var d = res.data.datos_pdf;
-    if (!d || !d.es_primer_ciclo) {
-      // 2do ciclo: abrir HTML como antes (pendiente de implementar PDF 2do ciclo)
-      var win = window.open("", "_blank");
-      win.document.write(res.data.html);
-      win.document.close();
-      return;
-    }
-
-    // 1er ciclo: generar PDF oficial
+    if (!d) { toast("❌ Sin datos para generar PDF"); return; }
     generarBoletinPDFOficial(d, res.data.alumno);
   });
 }
@@ -1288,147 +1278,122 @@ function verBoletin(id_alumno) {
 async function generarBoletinPDFOficial(d, alumno) {
   try {
     var { PDFDocument, rgb, StandardFonts } = PDFLib;
+    var grado = parseInt(d.grado);
+    var esPrimerCiclo = grado <= 3;
 
-    // Cargar el PDF base
-    var resp = await fetch(BOLETIN_PDF_URL_1ER_CICLO);
+    // Cargar el PDF base según el ciclo
+    var urlPDF = esPrimerCiclo ? BOLETIN_PDF_URL_1ER_CICLO : BOLETIN_PDF_URL_2DO_CICLO;
+    var resp = await fetch(urlPDF);
     if (!resp.ok) throw new Error("No se pudo cargar el PDF base");
     var pdfBytes = await resp.arrayBuffer();
 
     var pdfDoc = await PDFDocument.load(pdfBytes);
     var font   = await pdfDoc.embedFont(StandardFonts.Helvetica);
     var pages  = pdfDoc.getPages();
+    var PH     = 663.449;
 
-    var PH = 663.449; // alto real de cada página en puntos
-
-    // Helper: escribe texto en coordenadas top-down (y=0 arriba de la página)
     function txt(pageIdx, x, topY, text, size) {
       if (!text || pageIdx >= pages.length) return;
       var s = size || 8;
       pages[pageIdx].drawText(String(text), {
-        x: x,
-        y: PH - topY - s,
-        size: s,
-        font: font,
-        color: rgb(0, 0, 0)
+        x: x, y: PH - topY - s, size: s, font: font, color: rgb(0,0,0)
       });
     }
 
-    // Helper: texto largo con word-wrap manual
-    // charW: ancho estimado por carácter = size * 0.52
     function txtWrap(pageIdx, x, topY, maxW, text, size) {
       if (!text || pageIdx >= pages.length) return;
-      var s      = size || 7;
-      var charW  = s * 0.52;
-      var lineH  = s * 1.5;
-      var maxCh  = Math.floor(maxW / charW);
-      var words  = text.split(' ');
-      var line   = '';
-      var curY   = topY;
-      var maxL   = 5; // máximo de líneas por bloque
-      var lCount = 0;
+      var s = size || 7, charW = s * 0.52, lineH = s * 1.5;
+      var maxCh = Math.floor(maxW / charW);
+      var words = text.split(' '), line = '', curY = topY, lCount = 0, maxL = 5;
       words.forEach(function(w) {
         if (lCount >= maxL) return;
         var test = line ? line + ' ' + w : w;
         if (test.length > maxCh && line) {
-          txt(pageIdx, x, curY, line, s);
-          line  = w;
-          curY += lineH;
-          lCount++;
-        } else {
-          line = test;
-        }
+          txt(pageIdx, x, curY, line, s); line = w; curY += lineH; lCount++;
+        } else { line = test; }
       });
       if (line && lCount < maxL) txt(pageIdx, x, curY, line, s);
     }
 
-    // ── PÁGINA 1 (índice 0): Datos del alumno ──────────────────
-    // Los campos están en la mitad derecha de la página (x > 651)
-    // Cada campo tiene su propia fila Y
-    var P1 = 0;
-    txt(P1, 653, 162, d.apellido,          9.5);
-    txt(P1, 653, 191, d.nombre,           9.5);
-    txt(P1, 653, 220, d.dni,              9.5);
-    txt(P1, 653, 249, d.fecha_nacimiento, 9.5);
-    txt(P1, 653, 278, d.lugar_nacimiento, 9.5);
-    txt(P1, 653, 307, d.domicilio,        9.5);
-    txt(P1, 653, 336, d.establecimiento,  9);
-    txt(P1, 653, 365, d.domicilio_escuela,9.5);
-    txt(P1, 653, 394, d.distrito,         9.5);
+    // ── PÁGINA 1: Datos del alumno (igual en ambos ciclos) ───────
+    txt(0, 653, 162, d.apellido,          9.5);
+    txt(0, 653, 191, d.nombre,            9.5);
+    txt(0, 653, 220, d.dni,               9.5);
+    txt(0, 653, 249, d.fecha_nacimiento,  9.5);
+    txt(0, 653, 278, d.lugar_nacimiento,  9.5);
+    txt(0, 653, 307, d.domicilio,         9.5);
+    txt(0, 653, 336, d.establecimiento,   9);
+    txt(0, 653, 365, d.domicilio_escuela, 9.5);
+    txt(0, 653, 394, d.distrito,          9.5);
 
-    // ── PÁGINA 2 (índice 1): 1° año — tabla calificaciones ─────
-    // Solo se completa para alumno de 1° grado
-    var P2 = 1;
-    var grado = parseInt(d.grado);
-
-    // Ciclo lectivo y sección (encabezado)
-    // "CICLO LECTIVO 20___" — el "20" ya está impreso, escribimos solo los 2 dígitos finales
-    txt(P2, 258, 64, d.ciclo_lectivo.toString().slice(-2), 8);
-    txt(P2, 378, 64, d.seccion, 8);
-
-    // Columnas X del centro de cada celda de informe
+    // Columnas X e Y de áreas (iguales en ambos ciclos)
     var CI = { i1:160, i2:222, i3:284, pe:346, if_:409 };
 
-    // Filas Y de cada área (top-down)
-    var FY = {
-      PRACTICAS_LENGUAJE: 136,
-      MATEMATICA:         163,
-      CIENCIAS_SOCIALES:  190,
-      CIENCIAS_NATURALES: 217,
-      ED_ARTISTICA:       244,
-      ED_FISICA:          271
+    // Filas Y — 1er ciclo (sin Inglés)
+    var FY1 = {
+      PRACTICAS_LENGUAJE:136, MATEMATICA:163, CIENCIAS_SOCIALES:190,
+      CIENCIAS_NATURALES:217, ED_ARTISTICA:244, ED_FISICA:271
+    };
+    // Filas Y — 2do ciclo (con Inglés entre Ed.Artística y Ed.Física)
+    var FY2 = {
+      PRACTICAS_LENGUAJE:136, MATEMATICA:163, CIENCIAS_SOCIALES:190,
+      CIENCIAS_NATURALES:217, ED_ARTISTICA:244, ED_FISICA:271, INGLES:298
     };
 
-    ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES",
-     "CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"].forEach(function(area) {
-      var c = d.calificaciones[area] || {};
-      var y = FY[area];
-      if (c.i1)  txt(P2, CI.i1  - 6, y, c.i1,  8);
-      if (c.i2)  txt(P2, CI.i2  - 6, y, c.i2,  8);
-      if (c.i3)  txt(P2, CI.i3  - 6, y, c.i3,  8);
-      if (c.pe)  txt(P2, CI.pe  - 6, y, c.pe,  8);
-      if (c.if_) txt(P2, CI.if_ - 6, y, c.if_, 8);
-    });
+    function dibujarPagina(pageIdx, FY, areas) {
+      // Encabezado: ciclo lectivo (2 dígitos) y sección
+      txt(pageIdx, 258, 64, d.ciclo_lectivo.toString().slice(-2), 8);
+      txt(pageIdx, 378, 64, d.seccion, 8);
+      // Calificaciones
+      areas.forEach(function(area) {
+        var cal = d.calificaciones[area] || {};
+        var y   = FY[area];
+        if (cal.i1)  txt(pageIdx, CI.i1  - 6, y, cal.i1,  8);
+        if (cal.i2)  txt(pageIdx, CI.i2  - 6, y, cal.i2,  8);
+        if (cal.i3)  txt(pageIdx, CI.i3  - 6, y, cal.i3,  8);
+        if (cal.pe)  txt(pageIdx, CI.pe  - 6, y, cal.pe,  8);
+        if (cal.if_) txt(pageIdx, CI.if_ - 6, y, cal.if_, 8);
+      });
+      // Inasistencias
+      txt(pageIdx, CI.i1 - 6, esPrimerCiclo ? 334 : 361, d.inasistencias, 8);
+      // Observaciones
+      txtWrap(pageIdx, 492, 175, 408, d.observaciones.obs_1,     7);
+      txtWrap(pageIdx, 492, 258, 408, d.observaciones.obs_2,     7);
+      txtWrap(pageIdx, 492, 338, 408, d.observaciones.obs_3,     7);
+      txtWrap(pageIdx, 492, 415, 408, d.observaciones.obs_pe,    7);
+      txtWrap(pageIdx, 492, 490, 408, d.observaciones.obs_final, 7);
+    }
 
-    // Inasistencias (fila debajo de Ed. Física)
-    txt(P2, CI.i1 - 6, 334, d.inasistencias, 8);
+    if (esPrimerCiclo) {
+      // 1er ciclo: solo página 2 (grado 1°, 2° o 3°)
+      var areas1 = ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA"];
+      dibujarPagina(1, FY1, areas1);
 
-    // Observaciones — lado derecho
-    // Cada bloque ocupa aprox 65pt de alto; X arrancan en 492, ancho ~408pt
-    txtWrap(P2, 492, 175, 408, d.observaciones.obs_1,  7);
-    txtWrap(P2, 492, 258, 408, d.observaciones.obs_2,  7);
-    txtWrap(P2, 492, 338, 408, d.observaciones.obs_3,  7);
-    txtWrap(P2, 492, 415, 408, d.observaciones.obs_pe, 7);
-    txtWrap(P2, 492, 490, 408, d.observaciones.obs_final, 7);
+    } else {
+      // 2do ciclo: página según grado
+      // Página 2 = 4°, Página 3 = 5°, Página 4 = 6°
+      var areas2 = ["PRACTICAS_LENGUAJE","MATEMATICA","CIENCIAS_SOCIALES","CIENCIAS_NATURALES","ED_ARTISTICA","ED_FISICA","INGLES"];
+      var pageIdx = grado === 4 ? 1 : grado === 5 ? 2 : 3;
+      dibujarPagina(pageIdx, FY2, areas2);
+    }
 
-    // Páginas 3-6: NO se tocan (son para 2° y 3° año del ciclo)
-
-    // ── Descargar el PDF generado ────────────────────────────
+    // ── Descargar ────────────────────────────────────────────
     var pdfBytesOut = await pdfDoc.save();
     var blob = new Blob([pdfBytesOut], { type: 'application/pdf' });
     var url  = URL.createObjectURL(blob);
     var nombreArchivo = 'boletin_' + (alumno.apellido||'').replace(/\s+/g,'_').toLowerCase()
                       + '_' + d.ciclo_lectivo + '.pdf';
-
     var a = document.createElement('a');
-    a.href     = url;
-    a.download = nombreArchivo;
-    a.target   = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = nombreArchivo; a.target = '_blank';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-
     toast("✅ Boletín PDF descargado");
+
   } catch(err) {
     console.error("Error generando PDF:", err);
-    // Fallback: abrir HTML si falla la generación del PDF
     toast("⚠️ Abriendo boletín en pantalla (no se pudo generar PDF)");
     callBackend("generarBoletin", {id_alumno: alumno.id_alumno, ciclo_lectivo: APP.cicloLectivo}, function(res) {
-      if (res.ok) {
-        var win = window.open("", "_blank");
-        win.document.write(res.data.html);
-        win.document.close();
-      }
+      if (res.ok) { var win = window.open("","_blank"); win.document.write(res.data.html); win.document.close(); }
     });
   }
 }
