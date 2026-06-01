@@ -1345,15 +1345,15 @@ async function generarBoletinPDFOficial(d, alumno) {
     // Los campos están en la mitad derecha de la página (x > 651)
     // Cada campo tiene su propia fila Y
     var P1 = 0;
-    txt(P1, 653, 168, d.apellido,          8);
-    txt(P1, 653, 198, d.nombre,            8);
-    txt(P1, 653, 228, d.dni,               8);
-    txt(P1, 653, 258, d.fecha_nacimiento,  8);
-    txt(P1, 653, 288, d.lugar_nacimiento,  8);
-    txt(P1, 653, 318, d.domicilio,         8);
-    txt(P1, 653, 348, d.establecimiento,   7.5);
-    txt(P1, 653, 378, d.domicilio_escuela, 8);
-    txt(P1, 653, 408, d.distrito,          8);
+    txt(P1, 653, 162, d.apellido,          9.5);
+    txt(P1, 653, 191, d.nombre,           9.5);
+    txt(P1, 653, 220, d.dni,              9.5);
+    txt(P1, 653, 249, d.fecha_nacimiento, 9.5);
+    txt(P1, 653, 278, d.lugar_nacimiento, 9.5);
+    txt(P1, 653, 307, d.domicilio,        9.5);
+    txt(P1, 653, 336, d.establecimiento,  9);
+    txt(P1, 653, 365, d.domicilio_escuela,9.5);
+    txt(P1, 653, 394, d.distrito,         9.5);
 
     // ── PÁGINA 2 (índice 1): 1° año — tabla calificaciones ─────
     // Solo se completa para alumno de 1° grado
@@ -1394,11 +1394,11 @@ async function generarBoletinPDFOficial(d, alumno) {
 
     // Observaciones — lado derecho
     // Cada bloque ocupa aprox 65pt de alto; X arrancan en 492, ancho ~408pt
-    txtWrap(P2, 492, 155, 408, d.observaciones.obs_1,  7);
-    txtWrap(P2, 492, 232, 408, d.observaciones.obs_2,  7);
-    txtWrap(P2, 492, 310, 408, d.observaciones.obs_3,  7);
-    txtWrap(P2, 492, 388, 408, d.observaciones.obs_pe, 7);
-    txtWrap(P2, 492, 465, 408, d.observaciones.obs_final, 7);
+    txtWrap(P2, 492, 175, 408, d.observaciones.obs_1,  7);
+    txtWrap(P2, 492, 258, 408, d.observaciones.obs_2,  7);
+    txtWrap(P2, 492, 338, 408, d.observaciones.obs_3,  7);
+    txtWrap(P2, 492, 415, 408, d.observaciones.obs_pe, 7);
+    txtWrap(P2, 492, 490, 408, d.observaciones.obs_final, 7);
 
     // Páginas 3-6: NO se tocan (son para 2° y 3° año del ciclo)
 
