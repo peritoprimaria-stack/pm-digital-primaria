@@ -441,6 +441,7 @@ function construirMenu() {
     {section:"Informes", roles:["director","vicedirector","secretario","maestro"]},
     {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro"]},
     {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario"]},
+    {id:"reportes", icon:"📈", label:"Reportes", roles:["director","vicedirector","secretario"]},
     {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario"]},
     {section:"EOE", roles:["director","vicedirector","secretario","eoe"]},
     {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe"]},
@@ -479,7 +480,7 @@ function navegarA(pagina) {
 
   var titulos = {
     dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
-    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", ausencias_docentes:"Ausencias Docentes",
+    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes", ausencias_docentes:"Ausencias Docentes",
     legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios", configuracion:"Configuración"
   };
   document.getElementById("pageTitle").textContent = titulos[pagina] || pagina;
@@ -491,6 +492,7 @@ function navegarA(pagina) {
     alumnos: renderAlumnos,
     boletin: renderBoletin,
     horarios: renderHorarios,
+    reportes: renderReportes,
     ausencias_docentes: renderAusenciasDocentes,
     legajos: renderLegajos,
     mensajes: renderMensajes,
@@ -588,56 +590,90 @@ function statCard(icon, num, label, tipo) {
 // ════════════════════════════════════════════════════════════
 // ASISTENCIA
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// ASISTENCIA
+// Turno mañana: banda 8:00-8:30 / Turno tarde: 13:00-13:30
+// Estados: P=Presente A=Ausente T=Tarde
+// Umbral de riesgo: 5 inasistencias por trimestre
+// ════════════════════════════════════════════════════════════
+
+var asistenciaActual = [];
+var TRIMESTRES = [
+  {label:"1° Trimestre", desde:"03-01", hasta:"06-30"},
+  {label:"2° Trimestre", desde:"07-01", hasta:"09-30"},
+  {label:"3° Trimestre", desde:"10-01", hasta:"12-31"}
+];
+var UMBRAL_RIESGO = 5;
+
+function getTrimestre(fecha) {
+  if (!fecha) return 0;
+  var mes = parseInt(fecha.split("-")[1]);
+  if (mes <= 6)  return 1;
+  if (mes <= 9)  return 2;
+  return 3;
+}
+
 function renderAsistencia() {
   var pc = document.getElementById("pageContent");
   var hoy = fechaHoy();
   var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
-  var grado = APP.usuario.rol === "maestro" ? APP.usuario.grado : "";
-  var seccion = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "";
+  var gradoU   = APP.usuario.rol === "maestro" ? String(APP.usuario.grado) : "";
+  var seccionU = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "";
+  var trimActual = getTrimestre(hoy);
 
-  pc.innerHTML = `
-  <div class="card">
-    <div class="card-title">📋 Tomar Asistencia</div>
-    <div class="filtros">
-      <input type="date" id="asistFecha" class="form-control" style="width:180px" value="${hoy}">
-      ${esAdmin ? `
-      <select id="asistGrado" class="form-control" style="width:100px" onchange="cargarSeccionesAsist()">
-        <option value="">Grado</option>
-        ${[1,2,3,4,5,6].map(g=>'<option value="'+g+'"'+(grado==g?' selected':'')+'>'+g+'°</option>').join('')}
-      </select>
-      <select id="asistSeccion" class="form-control" style="width:100px">
-        <option value="">Sección</option>
-        <option value="A">A</option>
-        <option value="B">B</option>
-      </select>` : `<input type="hidden" id="asistGrado" value="${grado}"><input type="hidden" id="asistSeccion" value="${seccion}">
-      <span class="badge badge-P" style="font-size:13px">${grado}° ${seccion}</span>`}
-      <button class="btn btn-primary" onclick="cargarListaAsistencia()">📋 Cargar lista</button>
-    </div>
-    <div id="asistLista"></div>
-    <div id="asistAcciones" style="display:none;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-success btn-lg" onclick="guardarAsistencia()">💾 Guardar asistencia</button>
-      <button class="btn btn-outline" onclick="marcarTodos('P')">✅ Todos presentes</button>
-      <button class="btn btn-outline" onclick="marcarTodos('A')">❌ Todos ausentes</button>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">📊 Resumen del mes</div>
-    <div id="resumenAsist">
-      <p style="color:var(--text-light);font-size:13px">Seleccioná grado y sección para ver el resumen.</p>
-    </div>
-  </div>`;
+  var gradoOpts = [1,2,3,4,5,6].map(function(g){
+    return "<option value=\""+g+"\"" + (String(gradoU)===String(g)?" selected":"") + ">"+g+"°</option>";
+  }).join("");
+  var trimOpts = TRIMESTRES.map(function(t,i){
+    return "<option value=\"" + (i+1) + "\"" + (trimActual===(i+1)?" selected":"") + ">" + t.label + "</option>";
+  }).join("");
+
+  pc.innerHTML =
+    // ── TOMAR ASISTENCIA ──────────────────────────────────────
+    "<div class=\"card\">" +
+      "<div class=\"card-title\">📋 Tomar Asistencia</div>" +
+      "<div class=\"filtros\">" +
+        "<input type=\"date\" id=\"asistFecha\" class=\"form-control\" style=\"width:180px\" value=\""+hoy+"\">"+
+        (esAdmin
+          ? "<select id=\"asistGrado\" class=\"form-control\" style=\"width:100px\"><option value=\"\">Grado</option>"+gradoOpts+"</select>" +
+            "<select id=\"asistSeccion\" class=\"form-control\" style=\"width:100px\">" +
+              "<option value=\"\">Sección</option><option value=\"A\">A</option><option value=\"B\">B</option>" +
+            "</select>"
+          : "<input type=\"hidden\" id=\"asistGrado\" value=\""+gradoU+"\"><input type=\"hidden\" id=\"asistSeccion\" value=\""+seccionU+"\">" +
+            "<span class=\"badge badge-P\" style=\"font-size:13px\">"+gradoU+"° "+seccionU+"</span>"
+        ) +
+        "<button class=\"btn btn-primary\" onclick=\"cargarListaAsistencia()\">📋 Cargar lista</button>" +
+      "</div>" +
+      "<div id=\"asistLista\"></div>" +
+      "<div id=\"asistAcciones\" style=\"display:none;margin-top:12px;gap:8px;flex-wrap:wrap\">" +
+        "<button class=\"btn btn-success\" onclick=\"guardarAsistencia()\">💾 Guardar asistencia</button>" +
+        "<button class=\"btn btn-outline\" onclick=\"marcarTodos('P')\">✅ Todos presentes</button>" +
+        "<button class=\"btn btn-outline\" onclick=\"marcarTodos('A')\">❌ Todos ausentes</button>" +
+      "</div>" +
+    "</div>" +
+    // ── RESUMEN POR TRIMESTRE ──────────────────────────────────
+    "<div class=\"card\">" +
+      "<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:12px\">" +
+        "<div class=\"card-title\" style=\"margin:0\">📊 Resumen de asistencia</div>" +
+        "<div style=\"display:flex;gap:8px\">" +
+          "<select id=\"resGrado\" class=\"form-control\" style=\"width:100px\"><option value=\"\">Grado</option>"+gradoOpts+"</select>" +
+          "<select id=\"resSeccion\" class=\"form-control\" style=\"width:100px\">" +
+            "<option value=\"\">Sección</option><option value=\"A\">A</option><option value=\"B\">B</option>" +
+          "</select>" +
+          "<select id=\"resTrimestre\" class=\"form-control\" style=\"width:160px\">"+trimOpts+"</select>" +
+          "<button class=\"btn btn-primary\" onclick=\"cargarResumenAsistencia()\">Ver</button>" +
+        "</div>" +
+      "</div>" +
+      "<div id=\"resumenAsist\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná grado, sección y trimestre.</p></div>" +
+    "</div>";
 
   if (APP.usuario.rol === "maestro") {
+    document.getElementById("resGrado").value   = gradoU;
+    document.getElementById("resSeccion").value = seccionU;
     cargarListaAsistencia();
     cargarResumenAsistencia();
-  } else {
-    // Para directora: agregar botón de cargar resumen
-    document.getElementById("resumenAsist").innerHTML = 
-      '<button class="btn btn-primary" onclick="cargarResumenAsistencia()" style="margin-bottom:12px">📊 Ver resumen de asistencia</button>';
   }
 }
-
-var asistenciaActual = [];
 
 function cargarListaAsistencia() {
   var fecha   = document.getElementById("asistFecha").value;
@@ -645,49 +681,50 @@ function cargarListaAsistencia() {
   var seccion = document.getElementById("asistSeccion").value;
   if (!grado || !seccion) { toast("Seleccioná grado y sección"); return; }
 
-  document.getElementById("asistLista").innerHTML = '<p style="color:var(--text-light);font-size:13px">Cargando...</p>';
+  document.getElementById("asistLista").innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
 
-  // Cargar alumnos
-  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(resA) {
+  callBackend("getAlumnos", {grado: grado, seccion: seccion, ciclo_lectivo: APP.cicloLectivo}, function(resA) {
     if (!resA.ok || resA.data.length === 0) {
-      document.getElementById("asistLista").innerHTML = '<div class="alert alert-info">No hay alumnos registrados para este grado/sección.</div>';
+      document.getElementById("asistLista").innerHTML = "<div class=\"alert alert-info\">No hay alumnos en este grado/sección.</div>";
       return;
     }
-    // Cargar asistencia existente para esa fecha
     callBackend("getAsistencia", {fecha: fecha, grado: grado, seccion: seccion}, function(resR) {
       var registros = {};
-      if (resR.ok) {
-        resR.data.forEach(function(r) { registros[r.id_alumno] = r; });
-      }
+      if (resR.ok) resR.data.forEach(function(r){ registros[r.id_alumno] = r; });
+
       asistenciaActual = resA.data.map(function(al) {
         var reg = registros[al.id_alumno];
         return {
-          id_alumno: al.id_alumno,
+          id_alumno:       al.id_alumno,
           apellido_nombre: al.apellido + ", " + al.nombre,
-          grado: grado,
-          seccion: seccion,
-          estado: reg ? reg.estado : "P",
-          observacion: reg ? reg.observacion : ""
+          grado:           grado,
+          seccion:         seccion,
+          estado:          reg ? reg.estado : "P",
+          observacion:     reg ? (reg.observacion||"") : ""
         };
       });
       renderListaAsistencia();
-      document.getElementById("asistAcciones").style.display = "flex";
+      var acc = document.getElementById("asistAcciones");
+      if (acc) acc.style.display = "flex";
     });
   });
 }
 
 function renderListaAsistencia() {
-  var html = '<div class="asist-grid">';
+  var estadoLabel = {P:"Presente", A:"Ausente", T:"Tarde"};
+  var estadoColor = {P:"badge-P", A:"badge-A", T:"badge-T"};
+  var html = "<div class=\"asist-grid\">";
   asistenciaActual.forEach(function(al, idx) {
-    html += `<div class="asist-row">
-      <div class="asist-nombre">${al.apellido_nombre}</div>
-      <div class="asist-btns">
-        ${["P","A","T","RA"].map(function(e){
-          return '<button class="asist-btn '+e+(al.estado===e?' active':'')+'" onclick="setEstado('+idx+',(this),\''+e+'\')">'+e+'</button>';
-        }).join("")}
-      </div>
-      <input class="asist-obs" placeholder="Observación" value="${al.observacion||''}" oninput="setObs(${idx},this.value)">
-    </div>`;
+    html += "<div class=\"asist-row\">" +
+      "<div class=\"asist-nombre\">"+al.apellido_nombre+"</div>" +
+      "<div class=\"asist-btns\">" +
+        ["P","A","T"].map(function(e){
+          var lbl = {P:"✅ P",A:"❌ A",T:"⏰ T"}[e];
+          return "<button class=\"asist-btn "+e+(al.estado===e?" active":"")+"\" onclick=\"setEstado("+idx+",this,'"+e+"')\">"+lbl+"</button>";
+        }).join("") +
+      "</div>" +
+      "<input class=\"asist-obs\" placeholder=\"Observación...\" value=\""+( al.observacion||"").replace(/"/g,"&quot;")+"\" oninput=\"setObs("+idx+",this.value)\">" +
+    "</div>";
   });
   html += "</div>";
   document.getElementById("asistLista").innerHTML = html;
@@ -710,42 +747,89 @@ function guardarAsistencia() {
   var fecha   = document.getElementById("asistFecha").value;
   var grado   = document.getElementById("asistGrado").value;
   var seccion = document.getElementById("asistSeccion").value;
-  callBackend("guardarAsistencia", {fecha: fecha, registros: asistenciaActual}, function(res) {
+  callBackend("guardarAsistencia", {
+    fecha: fecha, grado: grado, seccion: seccion,
+    trimestre: getTrimestre(fecha),
+    ciclo_lectivo: APP.cicloLectivo,
+    registros: asistenciaActual
+  }, function(res) {
     if (res.ok) {
       toast("✅ Asistencia guardada — " + res.data.registros + " registros");
       cargarResumenAsistencia();
-    } else {
-      toast("❌ Error: " + res.error);
-    }
+    } else toast("❌ " + res.error);
   });
 }
 
 function cargarResumenAsistencia() {
-  var grado = document.getElementById("asistGrado") ? document.getElementById("asistGrado").value : APP.usuario.grado;
-  var seccion = document.getElementById("asistSeccion") ? document.getElementById("asistSeccion").value : APP.usuario.seccion;
-  if (!grado || !seccion) return;
-  callBackend("getResumenAsistencia", {grado: String(grado), seccion: seccion}, function(res) {
-    if (!res.ok || res.data.length === 0) {
-      document.getElementById("resumenAsist").innerHTML = '<p style="color:var(--text-light);font-size:13px">Sin datos de asistencia aún.</p>';
+  var grado    = (document.getElementById("resGrado")    || document.getElementById("asistGrado")).value    || APP.usuario.grado;
+  var seccion  = (document.getElementById("resSeccion")  || document.getElementById("asistSeccion")).value  || APP.usuario.seccion;
+  var trimestre = document.getElementById("resTrimestre") ? document.getElementById("resTrimestre").value : getTrimestre(fechaHoy());
+  if (!grado || !seccion) { toast("Seleccioná grado y sección"); return; }
+
+  document.getElementById("resumenAsist").innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
+
+  callBackend("getResumenAsistencia", {
+    grado: String(grado), seccion: seccion,
+    trimestre: trimestre, ciclo_lectivo: APP.cicloLectivo
+  }, function(res) {
+    if (!res.ok || !res.data || res.data.length === 0) {
+      document.getElementById("resumenAsist").innerHTML = "<div class=\"alert alert-info\">Sin datos de asistencia para este período.</div>";
       return;
     }
-    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Alumno/a</th><th>Presentes</th><th>Ausentes</th><th>Tardes</th><th>Retiros</th><th>Asistencia</th><th>Estado</th></tr></thead><tbody>';
+
+    var trimLabel = TRIMESTRES[(parseInt(trimestre)||1)-1].label;
+    var enRiesgo = res.data.filter(function(a){ return a.ausentes >= UMBRAL_RIESGO; });
+
+    var html = "";
+
+    // Alerta si hay alumnos en riesgo
+    if (enRiesgo.length > 0) {
+      html += "<div class=\"alert alert-warning\" style=\"margin-bottom:12px\">" +
+        "<strong>⚠️ "+enRiesgo.length+" alumno/s con "+UMBRAL_RIESGO+"+ inasistencias en el "+trimLabel+":</strong> " +
+        enRiesgo.map(function(a){ return "<strong>"+a.apellido_nombre+"</strong> ("+a.ausentes+" aus.)"; }).join(", ") +
+      "</div>";
+    }
+
+    html += "<p style=\"font-size:12px;color:var(--text-light);margin-bottom:8px\"><strong>"+trimLabel+"</strong> — "+grado+"°"+seccion+"</p>";
+    html += "<div class=\"table-container\"><table class=\"data-table\">" +
+      "<thead><tr>" +
+        "<th>Alumno/a</th>" +
+        "<th style=\"text-align:center\">Presentes</th>" +
+        "<th style=\"text-align:center;color:var(--danger)\">Ausentes</th>" +
+        "<th style=\"text-align:center;color:var(--warning)\">Tardes</th>" +
+        "<th style=\"text-align:center\">% Asistencia</th>" +
+        "<th>Estado</th>" +
+      "</tr></thead><tbody>";
+
     res.data.forEach(function(a) {
-      var color = a.en_riesgo ? "var(--danger)" : "var(--success)";
-      html += '<tr>'
-        +'<td>'+a.apellido_nombre+'</td>'
-        +'<td style="text-align:center">'+a.presentes+'</td>'
-        +'<td style="text-align:center;color:var(--danger)">'+a.ausentes+'</td>'
-        +'<td style="text-align:center;color:var(--warning)">'+a.tardes+'</td>'
-        +'<td style="text-align:center">'+a.retiros+'</td>'
-        +'<td><div style="display:flex;align-items:center;gap:6px"><div class="progress"><div class="progress-bar '+(a.en_riesgo?'risk':'ok')+'" style="width:'+a.porcentaje+'%"></div></div><span style="color:'+color+';font-weight:600">'+a.porcentaje+'%</span></div></td>'
-        +'<td>'+(a.en_riesgo?'<span class="badge badge-A">⚠ Riesgo</span>':'<span class="badge badge-P">OK</span>')+'</td>'
-        +'</tr>';
+      var riesgo = a.ausentes >= UMBRAL_RIESGO;
+      var pct    = a.porcentaje || 0;
+      var color  = riesgo ? "var(--danger)" : pct >= 85 ? "var(--success)" : "var(--warning)";
+      html += "<tr style=\"" + (riesgo ? "background:rgba(220,53,69,.04)" : "") + "\">" +
+        "<td><strong>"+a.apellido_nombre+"</strong></td>" +
+        "<td style=\"text-align:center\">"+a.presentes+"</td>" +
+        "<td style=\"text-align:center;font-weight:600;color:var(--danger)\">"+a.ausentes+"</td>" +
+        "<td style=\"text-align:center;color:var(--warning)\">"+a.tardes+"</td>" +
+        "<td>" +
+          "<div style=\"display:flex;align-items:center;gap:6px\">" +
+            "<div class=\"progress\" style=\"flex:1\"><div class=\"progress-bar " + (riesgo?"risk":"ok") + "\" style=\"width:"+pct+"%\"></div></div>" +
+            "<span style=\"color:"+color+";font-weight:600;min-width:36px\">"+pct+"%</span>" +
+          "</div>" +
+        "</td>" +
+        "<td>"+(riesgo
+          ? "<span class=\"badge badge-A\">⚠ Intensificación</span>"
+          : pct >= 85
+            ? "<span class=\"badge badge-P\">✓ Regular</span>"
+            : "<span class=\"badge\" style=\"background:#fff3cd;color:#856404\">Seguimiento</span>"
+        )+"</td>" +
+      "</tr>";
     });
+
     html += "</tbody></table></div>";
     document.getElementById("resumenAsist").innerHTML = html;
   });
 }
+
 
 // ════════════════════════════════════════════════════════════
 // CALIFICACIONES
@@ -1009,6 +1093,7 @@ function verAlumno(al) {
     ${al.observaciones_medicas ? '<div class="alert alert-warning" style="margin-top:12px">⚕️ '+al.observaciones_medicas+'</div>' : ''}`,
     [
       {label:"📄 Ver boletín", cls:"btn-primary", fn:'verBoletin("'+al.id_alumno+'")'},
+      {label:"🩹 Acta accidente", cls:"btn-outline", fn:'abrirActaAccidente("'+al.id_alumno+'")'},
       {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario"].includes(APP.usuario.rol)}
     ]
   );
@@ -1814,6 +1899,343 @@ function crearLegajoSubmit() {
       toast("✅ Legajo creado");
       cargarLegajos();
     } else toast("❌ " + res.error);
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════
+// REPORTES
+// ════════════════════════════════════════════════════════════
+function renderReportes() {
+  var pc = document.getElementById("pageContent");
+  var trimOpts = TRIMESTRES.map(function(t,i){
+    return "<option value=\"" + (i+1) + "\">" + t.label + "</option>";
+  }).join("");
+  var gradoOpts = "<option value=\"\">Todos</option>" + [1,2,3,4,5,6].map(function(g){
+    return "<option value=\""+g+"\">"+g+"°</option>";
+  }).join("");
+
+  pc.innerHTML =
+    "<div class=\"card\">" +
+      "<div class=\"card-title\">📈 Reportes</div>" +
+      // Pestañas
+      "<div style=\"display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap\">" +
+        "<button class=\"btn btn-primary\" id=\"tabAsist\" onclick=\"mostrarTabReporte('asist')\" >📋 Asistencia alumnos</button>" +
+        "<button class=\"btn btn-outline\" id=\"tabDoc\" onclick=\"mostrarTabReporte('doc')\" >👨‍🏫 Aus. docentes</button>" +
+        "<button class=\"btn btn-outline\" id=\"tabAccid\" onclick=\"mostrarTabReporte('accid')\" >🩹 Accidentes</button>" +
+      "</div>" +
+
+      // Reporte asistencia alumnos
+      "<div id=\"reporteAsist\">" +
+        "<div class=\"filtros\" style=\"margin-bottom:12px\">" +
+          "<select id=\"rpGrado\" class=\"form-control\" style=\"width:100px\">"+gradoOpts+"</select>" +
+          "<select id=\"rpSeccion\" class=\"form-control\" style=\"width:100px\">" +
+            "<option value=\"\">Todas</option><option value=\"A\">A</option><option value=\"B\">B</option>" +
+          "</select>" +
+          "<select id=\"rpTrimestre\" class=\"form-control\" style=\"width:160px\">"+trimOpts+"</select>" +
+          "<button class=\"btn btn-primary\" onclick=\"generarReporteAsistencia()\">Generar</button>" +
+        "</div>" +
+        "<div id=\"rpAsistResult\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná los filtros y presioná Generar.</p></div>" +
+      "</div>" +
+
+      // Reporte ausencias docentes
+      "<div id=\"reporteDoc\" style=\"display:none\">" +
+        "<div class=\"filtros\" style=\"margin-bottom:12px\">" +
+          "<input type=\"date\" id=\"rpDocDesde\" class=\"form-control\" style=\"width:160px\" placeholder=\"Desde\">" +
+          "<input type=\"date\" id=\"rpDocHasta\" class=\"form-control\" style=\"width:160px\" placeholder=\"Hasta\">" +
+          "<button class=\"btn btn-primary\" onclick=\"generarReporteDocentes()\">Generar</button>" +
+        "</div>" +
+        "<div id=\"rpDocResult\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná el rango de fechas.</p></div>" +
+      "</div>" +
+
+      // Reporte accidentes
+      "<div id=\"reporteAccid\" style=\"display:none\">" +
+        "<div class=\"filtros\" style=\"margin-bottom:12px\">" +
+          "<input type=\"date\" id=\"rpAccidDesde\" class=\"form-control\" style=\"width:160px\" placeholder=\"Desde\">" +
+          "<input type=\"date\" id=\"rpAccidHasta\" class=\"form-control\" style=\"width:160px\" placeholder=\"Hasta\">" +
+          "<button class=\"btn btn-primary\" onclick=\"generarReporteAccidentes()\">Generar</button>" +
+        "</div>" +
+        "<div id=\"rpAccidResult\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná el rango de fechas.</p></div>" +
+      "</div>" +
+    "</div>";
+}
+
+function mostrarTabReporte(tab) {
+  ["asist","doc","accid"].forEach(function(t) {
+    var el = document.getElementById("reporte" + (t==="asist"?"Asist":t==="doc"?"Doc":"Accid"));
+    var btn = document.getElementById("tab" + (t==="asist"?"Asist":t==="doc"?"Doc":"Accid"));
+    if (el) el.style.display = t === tab ? "block" : "none";
+    if (btn) { btn.className = t === tab ? "btn btn-primary" : "btn btn-outline"; }
+  });
+}
+
+function generarReporteAsistencia() {
+  var grado    = document.getElementById("rpGrado").value;
+  var seccion  = document.getElementById("rpSeccion").value;
+  var trimestre= document.getElementById("rpTrimestre").value;
+  var el       = document.getElementById("rpAsistResult");
+  el.innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
+
+  callBackend("getReporteAsistencia", {
+    grado: grado, seccion: seccion, trimestre: trimestre, ciclo_lectivo: APP.cicloLectivo
+  }, function(res) {
+    if (!res.ok || !res.data || res.data.length === 0) {
+      el.innerHTML = "<div class=\"alert alert-info\">Sin datos para los filtros seleccionados.</div>";
+      return;
+    }
+    var trimLabel = TRIMESTRES[(parseInt(trimestre)||1)-1].label;
+    var enRiesgo  = res.data.filter(function(a){ return a.ausentes >= UMBRAL_RIESGO; });
+    var html = "";
+
+    if (enRiesgo.length > 0) {
+      html += "<div class=\"alert alert-warning\" style=\"margin-bottom:12px\">" +
+        "<strong>⚠️ Alumnos que podrían pasar a período de intensificación ("+trimLabel+"):</strong><br>" +
+        enRiesgo.map(function(a){
+          return "• <strong>"+a.apellido_nombre+"</strong> — "+a.grado+"°"+a.seccion+" — "+a.ausentes+" inasistencias";
+        }).join("<br>") +
+      "</div>";
+    }
+
+    html += "<div class=\"table-container\"><table class=\"data-table\">" +
+      "<thead><tr>" +
+        "<th>Alumno/a</th><th>Grado</th>" +
+        "<th style=\"text-align:center\">Presentes</th>" +
+        "<th style=\"text-align:center;color:var(--danger)\">Ausentes</th>" +
+        "<th style=\"text-align:center;color:var(--warning)\">Tardes</th>" +
+        "<th style=\"text-align:center\">% Asistencia</th>" +
+        "<th>Estado</th>" +
+      "</tr></thead><tbody>";
+
+    res.data.forEach(function(a) {
+      var riesgo = a.ausentes >= UMBRAL_RIESGO;
+      var pct    = a.porcentaje || 0;
+      html += "<tr style=\"" + (riesgo?"background:rgba(220,53,69,.04)":"") + "\">" +
+        "<td><strong>"+a.apellido_nombre+"</strong></td>" +
+        "<td style=\"text-align:center\">"+a.grado+"°"+a.seccion+"</td>" +
+        "<td style=\"text-align:center\">"+a.presentes+"</td>" +
+        "<td style=\"text-align:center;font-weight:600;color:var(--danger)\">"+a.ausentes+"</td>" +
+        "<td style=\"text-align:center;color:var(--warning)\">"+a.tardes+"</td>" +
+        "<td><span style=\"font-weight:600;color:"+(riesgo?"var(--danger)":pct>=85?"var(--success)":"var(--warning)")+"\">"+pct+"%</span></td>" +
+        "<td>"+(riesgo
+          ? "<span class=\"badge badge-A\">⚠ Intensificación</span>"
+          : "<span class=\"badge badge-P\">✓ Regular</span>"
+        )+"</td>" +
+      "</tr>";
+    });
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  });
+}
+
+function generarReporteDocentes() {
+  var desde = document.getElementById("rpDocDesde").value;
+  var hasta = document.getElementById("rpDocHasta").value;
+  var el    = document.getElementById("rpDocResult");
+  if (!desde || !hasta) { toast("Completá las fechas"); return; }
+  el.innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
+
+  callBackend("getReporteAusenciasDocentes", {desde: desde, hasta: hasta}, function(res) {
+    if (!res.ok || !res.data || res.data.length === 0) {
+      el.innerHTML = "<div class=\"alert alert-info\">Sin ausencias en ese período.</div>";
+      return;
+    }
+    // Agrupar por docente
+    var porDocente = {};
+    res.data.forEach(function(a) {
+      if (!porDocente[a.docente_nombre]) porDocente[a.docente_nombre] = [];
+      porDocente[a.docente_nombre].push(a);
+    });
+
+    var html = "<div class=\"table-container\"><table class=\"data-table\">" +
+      "<thead><tr><th>Docente</th><th>Total ausencias</th><th>Motivos</th><th>Fechas</th></tr></thead><tbody>";
+
+    Object.keys(porDocente).sort().forEach(function(doc) {
+      var ausencias = porDocente[doc];
+      var motivos   = {};
+      ausencias.forEach(function(a){ motivos[a.motivo] = (motivos[a.motivo]||0) + 1; });
+      var motivoStr = Object.keys(motivos).map(function(m){ return m+"("+motivos[m]+")"; }).join(", ");
+      var fechasStr = ausencias.map(function(a){ return a.fecha; }).join(", ");
+      html += "<tr>" +
+        "<td><strong>"+doc+"</strong></td>" +
+        "<td style=\"text-align:center;font-weight:600;color:var(--danger)\">"+ausencias.length+"</td>" +
+        "<td style=\"font-size:12px\">"+motivoStr+"</td>" +
+        "<td style=\"font-size:11px;color:var(--text-light)\">"+fechasStr+"</td>" +
+      "</tr>";
+    });
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  });
+}
+
+function generarReporteAccidentes() {
+  var desde = document.getElementById("rpAccidDesde").value;
+  var hasta = document.getElementById("rpAccidHasta").value;
+  var el    = document.getElementById("rpAccidResult");
+  if (!desde || !hasta) { toast("Completá las fechas"); return; }
+  el.innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
+
+  callBackend("getAccidentes", {desde: desde, hasta: hasta}, function(res) {
+    if (!res.ok || !res.data || res.data.length === 0) {
+      el.innerHTML = "<div class=\"alert alert-info\">Sin accidentes en ese período.</div>";
+      return;
+    }
+    var html = "<div class=\"table-container\"><table class=\"data-table\">" +
+      "<thead><tr><th>Fecha</th><th>Alumno/a</th><th>Grado</th><th>Lugar</th><th>Acta</th></tr></thead><tbody>";
+    res.data.forEach(function(a) {
+      html += "<tr>" +
+        "<td>"+a.fecha+"</td>" +
+        "<td><strong>"+a.apellido_nombre+"</strong></td>" +
+        "<td style=\"text-align:center\">"+a.grado+"°"+a.seccion+"</td>" +
+        "<td>"+a.lugar+"</td>" +
+        "<td><button class=\"btn btn-outline\" style=\"padding:2px 8px;font-size:11px\" onclick=\"verActaAccidente('"+a.id_accidente+"')\">Ver acta</button></td>" +
+      "</tr>";
+    });
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ACTA DE ACCIDENTE ESCOLAR
+// ════════════════════════════════════════════════════════════
+function abrirActaAccidente(id_alumno) {
+  // Buscar alumno en memoria o pedir al backend
+  callBackend("getAlumno", {id_alumno: id_alumno}, function(res) {
+    if (!res.ok) { toast("❌ No se pudo cargar el alumno"); return; }
+    mostrarModalActaAccidente(res.data);
+  });
+}
+
+function mostrarModalActaAccidente(al) {
+  var lugares = ["aula","recreo","educación física","salida educativa","campamento",
+                 "taller","convivencia","baño","patio","escalera","vía pública","SUM","biblioteca","espacio de ed. física"];
+  var lugarOpts = lugares.map(function(l){
+    return "<option value=\""+l+"\">"+l+"</option>";
+  }).join("");
+
+  abrirModal("🩹 Acta de Accidente Escolar",
+    "<div class=\"form-grid\">" +
+      "<div class=\"form-group\"><label class=\"form-label\">Alumno/a</label>" +
+        "<input class=\"form-control\" value=\""+al.apellido+", "+al.nombre+"\" readonly style=\"background:#f8f9fa\"></div>" +
+      "<div class=\"form-group\"><label class=\"form-label\">Grado/Sección</label>" +
+        "<input class=\"form-control\" value=\""+al.grado+"° "+al.seccion+"\" readonly style=\"background:#f8f9fa\"></div>" +
+      "<div class=\"form-group\"><label class=\"form-label\">DNI</label>" +
+        "<input class=\"form-control\" value=\""+( al.dni||"")+"\" readonly style=\"background:#f8f9fa\"></div>" +
+      "<div class=\"form-group\"><label class=\"form-label\">Fecha del accidente</label>" +
+        "<input id=\"acFecha\" type=\"date\" class=\"form-control\" value=\""+fechaHoy()+"\"></div>" +
+      "<div class=\"form-group\"><label class=\"form-label\">Hora del accidente</label>" +
+        "<input id=\"acHora\" type=\"time\" class=\"form-control\"></div>" +
+      "<div class=\"form-group\"><label class=\"form-label\">Lugar de ocurrencia</label>" +
+        "<select id=\"acLugar\" class=\"form-control\">"+lugarOpts+"</select></div>" +
+    "</div>" +
+    "<div class=\"form-group\"><label class=\"form-label\">Cómo ocurrió el accidente</label>" +
+      "<textarea id=\"acComo\" class=\"form-control\" rows=\"3\"></textarea></div>" +
+    "<div class=\"form-group\"><label class=\"form-label\">Lesiones sufridas</label>" +
+      "<textarea id=\"acLesiones\" class=\"form-control\" rows=\"2\"></textarea></div>" +
+    "<input type=\"hidden\" id=\"acIdAlumno\" value=\""+al.id_alumno+"\">",
+    [
+      {label:"📄 Generar acta PDF", cls:"btn-outline", fn:"generarActaPDF()"},
+      {label:"💾 Guardar registro",  cls:"btn-primary", fn:"guardarAccidente()"}
+    ]
+  );
+}
+
+function guardarAccidente() {
+  var data = {
+    id_alumno: v("acIdAlumno"),
+    fecha:     v("acFecha"),
+    hora:      v("acHora"),
+    lugar:     v("acLugar"),
+    descripcion: v("acComo"),
+    lesiones:  v("acLesiones"),
+    ciclo_lectivo: APP.cicloLectivo
+  };
+  if (!data.descripcion) { toast("Describí cómo ocurrió el accidente"); return; }
+  callBackend("registrarAccidente", data, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Accidente registrado");
+    } else toast("❌ " + res.error);
+  });
+}
+
+function generarActaPDF() {
+  // Recopilar datos del formulario
+  var idAlumno = v("acIdAlumno");
+  callBackend("getAlumno", {id_alumno: idAlumno}, function(res) {
+    if (!res.ok) { toast("❌ No se pudo obtener los datos"); return; }
+    var al   = res.data;
+    var fecha = v("acFecha");
+    // Formatear fecha en español
+    var fechaObj = new Date(fecha + "T12:00:00");
+    var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    var fechaStr = fechaObj.getDate() + " de " + meses[fechaObj.getMonth()] + " de " + fechaObj.getFullYear();
+
+    var lugares = ["aula","recreo","educación física","salida educativa","campamento","taller",
+                   "convivencia","baño","patio","escalera","vía pública","SUM","biblioteca","espacio de ed. física"];
+    var lugarSel = v("acLugar");
+
+    var lugaresHTML = lugares.map(function(l) {
+      var marcado = l === lugarSel;
+      return "<div class=\"lugar-item\"><span class=\"box" + (marcado?" marcado":"") + "\"></span> "+l+"</div>";
+    }).join("");
+
+    var html = "<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"UTF-8\">" +
+      "<title>Denuncia de Accidente — "+al.apellido+", "+al.nombre+"</title>" +
+      "<style>* { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px 30px; max-width: 800px; margin: 0 auto; } .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; } .titulo { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 14px 0 4px; letter-spacing: 1px; } .colegio-info { margin-bottom: 10px; font-size: 12px; line-height: 2; } .campo { display: inline-block; min-width: 60px; border-bottom: 1px solid #000; padding: 0 4px; } .linea { margin-bottom: 10px; line-height: 2; font-size: 12px; } .seccion { font-weight: bold; margin: 12px 0 4px; font-size: 12px; } .lugar-grid { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; margin: 4px 0 10px; } .lugar-item { display: flex; align-items: center; gap: 4px; } .box { display: inline-block; width: 12px; height: 12px; border: 1px solid #000; vertical-align: middle; background: transparent; } .box.marcado { background: #000; } .firma { margin-top: 40px; display: flex; justify-content: space-between; } .firma-item { text-align: center; width: 45%; border-top: 1px solid #000; padding-top: 4px; font-size: 11px; } @media print { body { padding: 10px 20px; } }</style>" +
+      "</head><body>" +
+      "<div class=\"encabezado\"><div>Código de colegio: <strong>136</strong></div><div>Bs. As., "+fechaStr+"</div></div>" +
+      "<div style=\"text-align:right;font-size:11px;margin-bottom:6px\">SINIESTRO N°: <span class=\"campo\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>" +
+      "<div style=\"font-size:10px;margin-bottom:4px\">Enviar por fax: 02320-40 31 40 Int: 122 &nbsp;&nbsp; o e-mail a: siniestros@prome.com.ar &nbsp;&nbsp; PÓLIZA: <span class=\"campo\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>" +
+      "<div class=\"titulo\">DENUNCIA DE ACCIDENTE</div>" +
+      "<div class=\"colegio-info\">" +
+        "<div class=\"linea\"><strong>COLEGIO:</strong> &nbsp; PERITO MORENO</div>" +
+        "<div class=\"linea\"><strong>DOMICILIO:</strong> &nbsp; TOMÁS VALLE 5662 &nbsp;&nbsp;&nbsp; <strong>LOCALIDAD:</strong> &nbsp; GONZÁLEZ CATÁN</div>" +
+        "<div class=\"linea\"><strong>CONGREGACIÓN A LA CUAL PERTENECE:</strong> &nbsp;<span class=\"campo\" style=\"min-width:300px\">&nbsp;</span></div>" +
+      "</div>" +
+      "<div class=\"linea\"><strong>NOMBRE DEL ACCIDENTADO:</strong> &nbsp; <span class=\"campo\" style=\"min-width:250px\">"+al.apellido.toUpperCase()+", "+al.nombre.toUpperCase()+"</span> &nbsp;&nbsp; <strong>DNI:</strong> &nbsp; <span class=\"campo\" style=\"min-width:100px\">"+(al.dni||"")+"</span></div>" +
+      "<div class=\"linea\"><strong>DOMICILIO:</strong> &nbsp; <span class=\"campo\" style=\"min-width:200px\">"+(al.domicilio||"")+"</span> &nbsp;&nbsp; <strong>LOCALIDAD:</strong> &nbsp; <span class=\"campo\" style=\"min-width:120px\">González Catán</span></div>" +
+      "<div class=\"linea\"><strong>PCIA.:</strong> &nbsp; BUENOS AIRES &nbsp;&nbsp;&nbsp; <strong>TEL.:</strong> &nbsp; <span class=\"campo\" style=\"min-width:120px\">"+(al.telefono_responsable||"")+"</span></div>" +
+      "<div class=\"linea\"><strong>Fecha de nacimiento:</strong> &nbsp; <span class=\"campo\" style=\"min-width:100px\">"+(al.fecha_nacimiento||"")+"</span> &nbsp;&nbsp;&nbsp; <strong>Edad:</strong> &nbsp; <span class=\"campo\" style=\"min-width:40px\">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>" +
+      "<div class=\"linea\"><strong>Es alumno/a regular del grado/curso:</strong> &nbsp; <span class=\"campo\" style=\"min-width:60px\">"+al.grado+"°"+al.seccion+"</span></div>" +
+      "<div class=\"linea\" style=\"margin-top:10px\"><strong>FECHA DEL ACCIDENTE:</strong> &nbsp; <span class=\"campo\" style=\"min-width:100px\">"+fecha.split("-").reverse().join("/")+"</span>" +
+        " &nbsp;&nbsp; <strong>HORA:</strong> &nbsp; <span class=\"campo\" style=\"min-width:60px\">"+(v("acHora")||"")+"</span></div>" +
+      "<div class=\"seccion\">Lugar de ocurrencia:</div>" +
+      "<div class=\"lugar-grid\">"+lugaresHTML+"</div>" +
+      "<div class=\"seccion\">Forma en la que ocurrió el accidente:</div>" +
+      "<div style=\"border:1px solid #ccc;min-height:60px;padding:6px 8px;margin-bottom:10px;font-size:12px;line-height:1.6\">"+( v("acComo")||"")+"</div>" +
+      "<div class=\"seccion\">Lesiones sufridas:</div>" +
+      "<div style=\"border:1px solid #ccc;min-height:45px;padding:6px 8px;margin-bottom:16px;font-size:12px;line-height:1.6\">"+(v("acLesiones")||"")+"</div>" +
+      "<div class=\"linea\"><em>Declaro que todos los datos aquí expuestos son verdaderos.</em></div>" +
+      "<div class=\"firma\"><div class=\"firma-item\">Firma y aclaración del Director/a</div><div class=\"firma-item\">Firma y aclaración del Secretario/a</div></div>" +
+      "</body></html>";
+
+    var win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 500);
+  });
+}
+
+function verActaAccidente(id_accidente) {
+  callBackend("getAccidente", {id_accidente: id_accidente}, function(res) {
+    if (!res.ok) { toast("❌ No se pudo cargar el acta"); return; }
+    // Reconstruir modal con datos guardados
+    var a = res.data;
+    callBackend("getAlumno", {id_alumno: a.id_alumno}, function(resAl) {
+      if (resAl.ok) {
+        mostrarModalActaAccidente(resAl.data);
+        // Llenar campos con datos guardados
+        setTimeout(function() {
+          var sv = function(id, val) { var el = document.getElementById(id); if(el) el.value = val||""; };
+          sv("acFecha",    a.fecha);
+          sv("acHora",     a.hora);
+          sv("acLugar",    a.lugar);
+          sv("acComo",     a.descripcion);
+          sv("acLesiones", a.lesiones);
+        }, 100);
+      }
+    });
   });
 }
 
