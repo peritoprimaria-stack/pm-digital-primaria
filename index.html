@@ -324,6 +324,8 @@ var BACKEND_URL = "https://script.google.com/macros/s/AKfycbwUNUY_PAKwPUQ_Ps2FZw
 // ESTADO GLOBAL
 // ════════════════════════════════════════════════════════════
 var LEGAJO_ALUMNO_SEL = {id: "", nombre: "", grado: "", seccion: ""};
+var HORARIO_2026 = {"1A": {"grado": "1", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "OLIVERA D", "martes": "", "miercoles": "OLIVERA D", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "8:50 - 9:40", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "COUCHOT"}, {"hora": "3er hora", "rango": "9:55 - 10:45", "lunes": "", "martes": "", "miercoles": "", "jueves": "COUCHOT", "viernes": ""}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "2A": {"grado": "2", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "8:50 - 9:40", "lunes": "OLIVERA D", "martes": "", "miercoles": "", "jueves": "COUCHOT", "viernes": ""}, {"hora": "3er hora", "rango": "9:55 - 10:45", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "OLIVERA D"}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "COUCHOT"}]}, "3A": {"grado": "3", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "8:50 - 9:40", "lunes": "", "martes": "", "miercoles": "OLIVERA D", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "9:55 - 10:45", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "COUCHOT"}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "COUCHOT", "viernes": "OLIVERA D"}]}, "4A": {"grado": "4", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "CUEVAS M", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "9:05 - 9:55", "lunes": "", "martes": "OLIVERA D", "miercoles": "", "jueves": "OLIVERA D", "viernes": ""}, {"hora": "3er hora", "rango": "10:10 - 11:00", "lunes": "", "martes": "GONZALEZ M", "miercoles": "CUEVAS M", "jueves": "", "viernes": "GONZALEZ M"}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "5A": {"grado": "5", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "", "martes": "", "miercoles": "CUEVAS M", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "9:05 - 9:55", "lunes": "CUEVAS M", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "10:10 - 11:00", "lunes": "", "martes": "OLIVERA D", "miercoles": "", "jueves": "OLIVERA D", "viernes": ""}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "GONZALEZ M", "miercoles": "", "jueves": "GONZALEZ M", "viernes": ""}]}, "6A": {"grado": "6", "seccion": "A", "turno": "mañana", "horas": [{"hora": "1er hora", "rango": "8:00 - 8:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "9:05 - 9:55", "lunes": "", "martes": "", "miercoles": "CUEVAS M", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "10:10 - 11:00", "lunes": "arte", "martes": "", "miercoles": "", "jueves": "GONZALEZ M", "viernes": ""}, {"hora": "4ta hora", "rango": "11:00 - 11:50", "lunes": "", "martes": "OLIVERA D", "miercoles": "", "jueves": "OLIVERA D", "viernes": "GONZALEZ M"}]}, "1B": {"grado": "1", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "", "martes": "RUIZ K", "miercoles": "", "jueves": "NUÑEZ M", "viernes": ""}, {"hora": "2da hora", "rango": "13:50 - 14:40", "lunes": "NUÑEZ M", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "14:55 - 15:45", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "RUIZ K"}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "2B": {"grado": "2", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "NUÑEZ M", "martes": "NUÑEZ M", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "13:50 - 14:40", "lunes": "", "martes": "RUIZ K", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "14:55 - 15:45", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": "RUIZ K"}]}, "3B": {"grado": "3", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "PINTOS L", "viernes": ""}, {"hora": "2da hora", "rango": "13:50 - 14:40", "lunes": "", "martes": "", "miercoles": "PINTOS L", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "14:55 - 15:45", "lunes": "NUÑEZ M", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "NUÑEZ M", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "4B": {"grado": "4", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "", "martes": "GONZALEZ M", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "2da hora", "rango": "14:05 - 14:55", "lunes": "", "martes": "CUEVAS M", "miercoles": "CUEVAS M", "jueves": "GONZALEZ M", "viernes": ""}, {"hora": "3er hora", "rango": "15:10 - 16:00", "lunes": "", "martes": "", "miercoles": "PINTOS L", "jueves": "", "viernes": "PINTOS L"}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "5B": {"grado": "5", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "", "martes": "", "miercoles": "PINTOS L", "jueves": "", "viernes": "GONZALEZ M"}, {"hora": "2da hora", "rango": "14:05 - 14:55", "lunes": "", "martes": "GONZALEZ M", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "3er hora", "rango": "15:10 - 16:00", "lunes": "", "martes": "CUEVAS M", "miercoles": "CUEVAS M", "jueves": "PINTOS L", "viernes": ""}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}, "6B": {"grado": "6", "seccion": "B", "turno": "tarde", "horas": [{"hora": "1er hora", "rango": "13:00 - 13:50", "lunes": "", "martes": "CUEVAS M", "miercoles": "CUEVAS M", "jueves": "GONZALEZ M", "viernes": ""}, {"hora": "2da hora", "rango": "14:05 - 14:55", "lunes": "", "martes": "", "miercoles": "", "jueves": "PINTOS L", "viernes": "GONZALEZ M"}, {"hora": "3er hora", "rango": "15:10 - 16:00", "lunes": "", "martes": "PINTOS L", "miercoles": "", "jueves": "", "viernes": ""}, {"hora": "4ta hora", "rango": "16:00 - 16:50", "lunes": "", "martes": "", "miercoles": "", "jueves": "", "viernes": ""}]}};
+
 var APP = {
   usuario: null,
   config: {},
@@ -438,6 +440,7 @@ function construirMenu() {
     {id:"alumnos", icon:"👨‍🎓", label:"Alumnos", roles:["director","vicedirector","secretario","maestro"]},
     {section:"Informes", roles:["director","vicedirector","secretario","maestro"]},
     {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro"]},
+    {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario"]},
     {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario"]},
     {section:"EOE", roles:["director","vicedirector","secretario","eoe"]},
     {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe"]},
@@ -476,7 +479,7 @@ function navegarA(pagina) {
 
   var titulos = {
     dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
-    alumnos:"Alumnos", boletin:"Boletines", ausencias_docentes:"Ausencias Docentes",
+    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", ausencias_docentes:"Ausencias Docentes",
     legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios", configuracion:"Configuración"
   };
   document.getElementById("pageTitle").textContent = titulos[pagina] || pagina;
@@ -487,6 +490,7 @@ function navegarA(pagina) {
     calificaciones: renderCalificaciones,
     alumnos: renderAlumnos,
     boletin: renderBoletin,
+    horarios: renderHorarios,
     ausencias_docentes: renderAusenciasDocentes,
     legajos: renderLegajos,
     mensajes: renderMensajes,
@@ -1814,21 +1818,82 @@ function crearLegajoSubmit() {
 }
 
 // ════════════════════════════════════════════════════════════
+// HORARIOS
+// ════════════════════════════════════════════════════════════
+function renderHorarios() {
+  var pc = document.getElementById("pageContent");
+  var gradoOpts = [1,2,3,4,5,6].map(function(g){
+    return '<option value="'+g+'">'+g+'°</option>';
+  }).join('');
+  pc.innerHTML =
+    '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div class="card-title" style="margin:0">🗓️ Horarios</div>' +
+      '</div>' +
+      '<div class="filtros" style="margin-bottom:16px">' +
+        '<select id="horGrado" class="form-control" style="width:120px" onchange="mostrarHorario()">' +
+          '<option value="">Grado...</option>' + gradoOpts +
+        '</select>' +
+        '<select id="horSeccion" class="form-control" style="width:100px" onchange="mostrarHorario()">' +
+          '<option value="">Sección...</option>' +
+          '<option value="A">A</option><option value="B">B</option>' +
+        '</select>' +
+      '</div>' +
+      '<div id="horarioTabla"></div>' +
+    '</div>';
+}
+
+function mostrarHorario() {
+  var grado   = document.getElementById("horGrado").value;
+  var seccion = document.getElementById("horSeccion").value;
+  var el      = document.getElementById("horarioTabla");
+  if (!grado || !seccion) { el.innerHTML = ''; return; }
+
+  var key  = grado + seccion;
+  var data = HORARIO_2026[key];
+  if (!data) {
+    el.innerHTML = '<div class="alert alert-info">No hay horario cargado para '+grado+'°'+seccion+'.</div>';
+    return;
+  }
+
+  var dias = ['lunes','martes','miercoles','jueves','viernes'];
+  var diasLabel = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+
+  var html = '<p style="color:var(--text-light);font-size:13px;margin-bottom:8px">Turno: <strong>'+data.turno+'</strong></p>';
+  html += '<div class="table-container"><table class="data-table">';
+  html += '<thead><tr><th>Hora</th><th>Horario</th>';
+  diasLabel.forEach(function(d){ html += '<th>'+d+'</th>'; });
+  html += '</tr></thead><tbody>';
+
+  data.horas.forEach(function(h) {
+    html += '<tr><td><strong>'+h.hora+'</strong></td><td style="color:var(--text-light);font-size:12px">'+h.rango+'</td>';
+    dias.forEach(function(d) {
+      var docente = h[d] || '';
+      html += '<td>'+(docente ? '<span style="background:var(--primary-light,#fde8e8);color:var(--primary);padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">'+docente+'</span>' : '<span style="color:#ccc">—</span>')+'</td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
 // AUSENCIAS DOCENTES
 // ════════════════════════════════════════════════════════════
 function renderAusenciasDocentes() {
   var pc = document.getElementById("pageContent");
-  pc.innerHTML = `
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="card-title" style="margin:0">👨‍🏫 Ausencias Docentes</div>
-      <button class="btn btn-primary" onclick="abrirModalAusenciaDocente()">+ Registrar ausencia</button>
-    </div>
-    <div class="filtros">
-      <input type="date" id="ausDocFecha" class="form-control" style="width:180px" value="${fechaHoy()}" onchange="cargarAusenciasDocentes()">
-    </div>
-    <div id="ausDocentesList">Cargando...</div>
-  </div>`;
+  pc.innerHTML =
+    '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div class="card-title" style="margin:0">👨‍🏫 Ausencias Docentes</div>' +
+        '<button class="btn btn-primary" onclick="abrirModalAusenciaDocente()">+ Registrar ausencia</button>' +
+      '</div>' +
+      '<div class="filtros">' +
+        '<input type="date" id="ausDocFecha" class="form-control" style="width:180px" value="'+fechaHoy()+'" onchange="cargarAusenciasDocentes()">' +
+      '</div>' +
+      '<div id="ausDocentesList">Cargando...</div>' +
+    '</div>';
   cargarAusenciasDocentes();
 }
 
@@ -1839,39 +1904,96 @@ function cargarAusenciasDocentes() {
       document.getElementById("ausDocentesList").innerHTML = '<div class="alert alert-info">Sin ausencias registradas para esta fecha.</div>';
       return;
     }
-    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Docente</th><th>Grado</th><th>Sección</th><th>Motivo</th><th>Reemplazante</th></tr></thead><tbody>';
+    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Docente</th><th>Horas afectadas</th><th>Motivo</th><th>Reemplazante</th></tr></thead><tbody>';
     res.data.forEach(function(a) {
-      html += '<tr><td>'+a.docente_nombre+'</td><td>'+a.grado+'°</td><td>'+a.seccion+'</td><td>'+a.motivo+'</td><td>'+(a.reemplazante||'—')+'</td></tr>';
+      // Calcular impacto en el horario
+      var impacto = calcularImpactoAusencia(a.docente_nombre, fecha);
+      var impactoHtml = impacto.length > 0
+        ? impacto.map(function(i){ return '<span style="background:#fff3cd;padding:1px 6px;border-radius:3px;font-size:11px;margin:1px;display:inline-block">'+i+'</span>'; }).join(' ')
+        : '<span style="color:#ccc;font-size:12px">—</span>';
+      html += '<tr><td><strong>'+a.docente_nombre+'</strong></td><td>'+impactoHtml+'</td><td>'+a.motivo+'</td><td>'+(a.reemplazante||'—')+'</td></tr>';
     });
     html += '</tbody></table></div>';
     document.getElementById("ausDocentesList").innerHTML = html;
   });
 }
 
+function calcularImpactoAusencia(nombreDocente, fecha) {
+  // Convierte la fecha en día de la semana
+  var diasMap = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+  var d = new Date(fecha + 'T12:00:00');
+  var diaSemana = diasMap[d.getDay()];
+  if (!diaSemana || diaSemana === 'domingo' || diaSemana === 'sabado') return [];
+
+  var impacto = [];
+  var nombreNorm = nombreDocente.toUpperCase().replace(/\.$/,'').trim();
+
+  Object.keys(HORARIO_2026).forEach(function(key) {
+    var curso = HORARIO_2026[key];
+    curso.horas.forEach(function(h) {
+      var doc = (h[diaSemana] || '').toUpperCase().replace(/\.$/,'').trim();
+      if (doc && nombreNorm.startsWith(doc.split(' ')[0]) || doc.startsWith(nombreNorm.split(' ')[0])) {
+        impacto.push(key + ' ' + h.hora + ' (' + h.rango + ')');
+      }
+    });
+  });
+  return impacto;
+}
+
 function abrirModalAusenciaDocente() {
-  abrirModal("+ Registrar Ausencia Docente", `
-    <div class="form-group"><label class="form-label">Fecha</label><input id="adFecha" type="date" class="form-control" value="${fechaHoy()}"></div>
-    <div class="form-group"><label class="form-label">Nombre del docente</label><input id="adNombre" class="form-control"></div>
-    <div class="form-group"><label class="form-label">Email del docente</label><input id="adEmail" type="email" class="form-control"></div>
-    <div class="form-grid">
-      <div class="form-group"><label class="form-label">Grado</label>
-        <select id="adGrado" class="form-control">${[1,2,3,4,5,6].map(g=>'<option value="'+g+'">'+g+'°</option>').join('')}</select></div>
-      <div class="form-group"><label class="form-label">Sección</label>
-        <select id="adSeccion" class="form-control"><option value="A">A</option><option value="B">B</option></select></div>
-    </div>
-    <div class="form-group"><label class="form-label">Motivo</label>
-      <select id="adMotivo" class="form-control">
-        <option>Enfermedad</option><option>Licencia</option><option>Capacitación</option><option>Otro</option>
-      </select></div>
-    <div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>`,
+  // Armar lista de docentes únicos del horario
+  var docentes = {};
+  Object.keys(HORARIO_2026).forEach(function(key) {
+    HORARIO_2026[key].horas.forEach(function(h) {
+      ['lunes','martes','miercoles','jueves','viernes'].forEach(function(d) {
+        if (h[d]) docentes[h[d].toUpperCase()] = true;
+      });
+    });
+  });
+  var docenteOpts = Object.keys(docentes).sort().map(function(n){
+    return '<option value="'+n+'">'+n+'</option>';
+  }).join('');
+
+  abrirModal("+ Registrar Ausencia Docente",
+    '<div class="form-group"><label class="form-label">Fecha</label><input id="adFecha" type="date" class="form-control" value="'+fechaHoy()+'" onchange="previsualizarImpacto()"></div>' +
+    '<div class="form-group"><label class="form-label">Docente *</label>' +
+      '<select id="adNombre" class="form-control" onchange="previsualizarImpacto()">' +
+        '<option value="">— Seleccioná —</option>' + docenteOpts +
+      '</select></div>' +
+    '<div id="adImpacto" style="margin-bottom:12px"></div>' +
+    '<div class="form-group"><label class="form-label">Motivo</label>' +
+      '<select id="adMotivo" class="form-control">' +
+        '<option>Enfermedad</option><option>Licencia</option><option>Capacitación</option><option>Otro</option>' +
+      '</select></div>' +
+    '<div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>',
     [{label:"💾 Registrar", cls:"btn-primary", fn:"registrarAusenciaDocenteSubmit()"}]
   );
 }
 
+function previsualizarImpacto() {
+  var nombre = v("adNombre");
+  var fecha  = v("adFecha");
+  var el     = document.getElementById("adImpacto");
+  if (!nombre || !fecha || !el) return;
+
+  var impacto = calcularImpactoAusencia(nombre, fecha);
+  if (impacto.length === 0) {
+    el.innerHTML = '<div class="alert alert-info" style="font-size:12px">Este docente no tiene horas ese día.</div>';
+  } else {
+    el.innerHTML =
+      '<div class="alert alert-warning" style="font-size:12px">' +
+        '<strong>⚠️ Horas sin cubrir:</strong><br>' +
+        impacto.map(function(i){ return '• '+i; }).join('<br>') +
+      '</div>';
+  }
+}
+
 function registrarAusenciaDocenteSubmit() {
+  var nombre = v("adNombre");
+  if (!nombre) { toast("Seleccioná un docente"); return; }
   callBackend("registrarAusenciaDocente", {
-    fecha: v("adFecha"), docente_nombre: v("adNombre"), docente_email: v("adEmail"),
-    grado: v("adGrado"), seccion: v("adSeccion"), motivo: v("adMotivo"), reemplazante: v("adReemplazante")
+    fecha: v("adFecha"), docente_nombre: nombre,
+    motivo: v("adMotivo"), reemplazante: v("adReemplazante")
   }, function(res) {
     if (res.ok) { cerrarModal(); toast("✅ Ausencia registrada"); cargarAusenciasDocentes(); }
     else toast("❌ " + res.error);
