@@ -513,9 +513,50 @@ function toggleSidebar(force) {
 // ════════════════════════════════════════════════════════════
 // DASHBOARD
 // ════════════════════════════════════════════════════════════
+function getSaludo() {
+  var hora = new Date().getHours();
+  var saludo = hora >= 6 && hora < 12 ? "Buenos días" : hora >= 12 && hora < 20 ? "Buenas tardes" : "Buenas noches";
+  var frasesDia = [
+    "Que sea un gran día para toda la comunidad educativa 🌟",
+    "Un nuevo día, nuevas oportunidades para enseñar y aprender 📚",
+    "Que todo fluya bien hoy en el Colegio Perito Moreno 🏫",
+    "Que tengas un día lleno de energía y buenas noticias 💪",
+    "Gracias por el trabajo que hacés cada día por los chicos 🙌",
+    "Que hoy sea un día tranquilo y productivo ✨",
+    "Un abrazo digital para empezar el día con todo 🤗"
+  ];
+  var frasesNoche = [
+    "Trabajando hasta tarde, ¡eso se admira! 🌙",
+    "El compromiso no tiene horario. Gracias por todo lo que hacés 💫",
+    "Cerrando el día con todo. ¡Merecés un descanso! 🌟",
+    "Los mejores docentes siempre tienen algo más para dar. Gracias 🙏",
+    "Que esta noche traigas paz después de un día de tanto trabajo ✨",
+    "El colegio es lo que es gracias a personas como vos 🏫",
+    "Que descanses bien, mañana hay otro gran día por delante 😊"
+  ];
+  var pool = (hora >= 20 || hora < 6) ? frasesNoche : frasesDia;
+  var frase = pool[new Date().getDay() % pool.length];
+  var nombre = APP.usuario.nombre || APP.usuario.apellido || "";
+  return { saludo: saludo, nombre: nombre, frase: frase };
+}
+
 function renderDashboard() {
   var pc = document.getElementById("pageContent");
-  pc.innerHTML = '<div class="stat-grid" id="statsGrid"><div style="text-align:center;padding:20px;color:var(--text-light)">Cargando estadísticas...</div></div><div id="dashAlerts"></div>';
+
+  // Saludo personalizado
+  var s = getSaludo();
+  var saludoHTML =
+    '<div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--primary) 0%,#c0392b 100%);color:#fff;border:none">' +
+      '<div style="display:flex;align-items:center;gap:14px">' +
+        '<div style="font-size:40px">👋</div>' +
+        '<div>' +
+          '<div style="font-size:20px;font-weight:700;margin-bottom:4px">' + s.saludo + ', ' + s.nombre + '</div>' +
+          '<div style="font-size:13px;opacity:.9">' + s.frase + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  pc.innerHTML = saludoHTML + '<div class="stat-grid" id="statsGrid"><div style="text-align:center;padding:20px;color:var(--text-light)">Cargando estadísticas...</div></div><div id="dashAlerts"></div>';
 
   var rol = APP.usuario.rol;
 
