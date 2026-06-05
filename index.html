@@ -566,12 +566,12 @@ function renderDashboard() {
       var total = res.ok ? res.data.length : 0;
       callBackend("getAlertasAsistencia", {grado: APP.usuario.grado, seccion: APP.usuario.seccion}, function(resA) {
         var alertas = resA.ok ? resA.data.length : 0;
-        document.getElementById("statsGrid").innerHTML =
+        var __sg=document.getElementById("statsGrid");if(__sg)__sg.innerHTML =
           statCard("👨‍🎓", total, APP.usuario.grado + "° " + APP.usuario.seccion + " — Alumnos", "") +
           statCard("⚠️", alertas, "Riesgo asistencia", alertas > 0 ? "danger" : "") +
           statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "");
         if (alertas > 0) {
-          document.getElementById("dashAlerts").innerHTML =
+          var __da=document.getElementById("dashAlerts");if(__da)__da.innerHTML =
             '<div class="card"><div class="card-title">⚠️ Alertas de Asistencia</div>' +
             resA.data.map(function(a) {
               return '<div class="alert alert-warning">'+a.apellido_nombre+' — '+a.porcentaje+'% asistencia</div>';
@@ -583,11 +583,11 @@ function renderDashboard() {
     callBackend("getEstadisticas", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
       if (!res.ok) {
         // Mostrar dashboard básico aunque falle estadísticas
-        document.getElementById("statsGrid").innerHTML =
+        var __sg=document.getElementById("statsGrid");if(__sg)__sg.innerHTML =
           statCard("🏫", APP.config.NOMBRE_ESCUELA || "Escuela", "Institución", "") +
           statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "") +
           statCard("👤", APP.usuario.nombre + " " + APP.usuario.apellido, "Director/a", "");
-        document.getElementById("dashAlerts").innerHTML =
+        var __da=document.getElementById("dashAlerts");if(__da)__da.innerHTML =
           '<div class="card"><div class="alert alert-info">📌 Sistema iniciado correctamente. Comenzá cargando alumnos en el módulo <b>Alumnos</b>.</div></div>';
         return;
       }
@@ -597,14 +597,14 @@ function renderDashboard() {
       var promPct = data.length > 0
         ? Math.round(data.reduce(function(s,d){return s+(d.promedio_asistencia_pct||0)},0)/data.length)
         : 0;
-      document.getElementById("statsGrid").innerHTML =
+      var __sg=document.getElementById("statsGrid");if(__sg)__sg.innerHTML =
         statCard("👨‍🎓", totalAlumnos || "0", "Alumnos", "") +
         statCard("🏫", totalSecciones || "0", "Secciones activas", "") +
         statCard("📅", APP.cicloLectivo, "Ciclo Lectivo", "") +
         statCard("📊", promPct > 0 ? promPct + "%" : "—", "Asistencia promedio", "");
 
       if (data.length === 0) {
-        document.getElementById("dashAlerts").innerHTML =
+        var __da=document.getElementById("dashAlerts");if(__da)__da.innerHTML =
           '<div class="card"><div class="alert alert-info">📌 Sistema listo. Comenzá cargando alumnos en el módulo <b>Alumnos</b>.</div></div>';
         return;
       }
@@ -619,7 +619,7 @@ function renderDashboard() {
           + '<span style="color:'+color+';font-weight:600">'+pct+'%</span></div></td></tr>';
       });
       tabla += "</tbody></table></div></div>";
-      document.getElementById("dashAlerts").innerHTML = tabla;
+      var __da=document.getElementById("dashAlerts");if(__da)__da.innerHTML = tabla;
     });
   }
 }
