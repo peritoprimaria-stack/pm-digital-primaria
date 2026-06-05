@@ -2010,6 +2010,53 @@ function mostrarTabReporte(tab) {
   });
 }
 
+// ── Helper: cabecera HTML para reportes imprimibles ──────────
+function _cabeceraReporte(titulo, subtitulo) {
+  var esc   = (APP.config && APP.config.NOMBRE_ESCUELA)    || "Escuela Primaria";
+  var cue   = (APP.config && APP.config.CUE)               || "";
+  var dist  = (APP.config && APP.config.DISTRITO)          || "";
+  var ciclo = APP.cicloLectivo || "";
+  var hoy   = new Date();
+  var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var fechaHoyStr = hoy.getDate() + " de " + meses[hoy.getMonth()] + " de " + hoy.getFullYear();
+  return "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>" +
+    "<title>"+titulo+"</title>" +
+    "<style>" +
+      "*{box-sizing:border-box;margin:0;padding:0}" +
+      "body{font-family:Arial,sans-serif;font-size:12px;color:#000;padding:24px 32px;max-width:900px;margin:0 auto}" +
+      ".cabecera{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #B71C1C;padding-bottom:10px;margin-bottom:16px}" +
+      ".cab-izq .escuela{font-size:16px;font-weight:bold;color:#B71C1C}" +
+      ".cab-izq .meta{font-size:11px;color:#555;margin-top:3px}" +
+      ".cab-der{text-align:right;font-size:11px;color:#555}" +
+      ".titulo-reporte{text-align:center;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;color:#212121}" +
+      ".subtitulo-reporte{text-align:center;font-size:12px;color:#555;margin-bottom:16px}" +
+      "table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}" +
+      "th{background:#B71C1C;color:#fff;padding:7px 10px;text-align:left;font-size:11px}" +
+      "td{padding:6px 10px;border-bottom:1px solid #e0e0e0;vertical-align:middle}" +
+      "tr:nth-child(even) td{background:#fafafa}" +
+      ".riesgo td{background:#fff5f5!important}" +
+      ".badge-ok{background:#e8f5e9;color:#2E7D32;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600}" +
+      ".badge-risk{background:#ffebee;color:#C62828;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600}" +
+      ".resumen{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;display:flex;gap:24px;flex-wrap:wrap}" +
+      ".resumen b{color:#B71C1C}" +
+      ".alerta-box{background:#fff3cd;border-left:4px solid #f57f17;padding:8px 12px;margin-bottom:14px;font-size:12px}" +
+      ".pie{margin-top:24px;border-top:1px solid #e0e0e0;padding-top:8px;font-size:10px;color:#999;text-align:center}" +
+      ".no-print{display:flex;justify-content:center;margin:20px 0;gap:12px}" +
+      ".btn-imp{padding:10px 24px;background:#B71C1C;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:Arial}" +
+      ".btn-imp:hover{background:#7F0000}" +
+      "@media print{.no-print{display:none}body{padding:10px 16px}}" +
+    "</style></head><body>" +
+    "<div class='cabecera'>" +
+      "<div class='cab-izq'>" +
+        "<div class='escuela'>"+esc+"</div>" +
+        "<div class='meta'>"+(cue?"CUE: "+cue+" &nbsp;|&nbsp; ":"")+(dist?"Distrito: "+dist+" &nbsp;|&nbsp; ":"")+"Ciclo: "+ciclo+"</div>" +
+      "</div>" +
+      "<div class='cab-der'>Fecha de emisión:<br><strong>"+fechaHoyStr+"</strong></div>" +
+    "</div>" +
+    "<div class='titulo-reporte'>"+titulo+"</div>" +
+    "<div class='subtitulo-reporte'>"+subtitulo+"</div>";
+}
+
 function generarReporteAsistencia() {
   var grado    = document.getElementById("rpGrado").value;
   var seccion  = document.getElementById("rpSeccion").value;
@@ -2064,8 +2111,58 @@ function generarReporteAsistencia() {
       "</tr>";
     });
     html += "</tbody></table></div>";
+    html += "<button class=\"btn btn-outline\" style=\"margin-top:8px\" onclick=\"imprimirReporteAsistencia()\">🖨️ Imprimir / Guardar PDF</button>";
     el.innerHTML = html;
+
+    // Guardar datos para el PDF
+    window._lastReporteAsist = { data: res.data, trimLabel: trimLabel, grado: grado, seccion: seccion, enRiesgo: enRiesgo };
   });
+}
+
+function imprimirReporteAsistencia() {
+  var r = window._lastReporteAsist;
+  if (!r) return;
+  var filtroStr = (r.grado ? r.grado+"°" : "Todos los grados") + (r.seccion ? " — Sección "+r.seccion : " — Todas las secciones") + " — " + r.trimLabel;
+  var subtitulo = "Reporte de Asistencia de Alumnos &nbsp;|&nbsp; " + filtroStr;
+  var html = _cabeceraReporte("Reporte de Asistencia", subtitulo);
+
+  // Resumen
+  var totalAlumnos = r.data.length;
+  var totalRiesgo  = r.enRiesgo.length;
+  var promPct = totalAlumnos > 0 ? Math.round(r.data.reduce(function(s,a){return s+(a.porcentaje||0)},0)/totalAlumnos) : 0;
+  html += "<div class='resumen'>" +
+    "<span>Total alumnos: <b>"+totalAlumnos+"</b></span>" +
+    "<span>En riesgo (≥"+UMBRAL_RIESGO+" inasistencias): <b>"+totalRiesgo+"</b></span>" +
+    "<span>Asistencia promedio: <b>"+promPct+"%</b></span>" +
+  "</div>";
+
+  if (r.enRiesgo.length > 0) {
+    html += "<div class='alerta-box'>⚠️ <strong>Alumnos con posible período de intensificación:</strong> " +
+      r.enRiesgo.map(function(a){ return a.apellido_nombre+" ("+a.ausentes+" aus.)"; }).join(" &nbsp;·&nbsp; ") +
+    "</div>";
+  }
+
+  html += "<table><thead><tr>" +
+    "<th>Alumno/a</th><th>Grado</th><th style='text-align:center'>Presentes</th>" +
+    "<th style='text-align:center'>Ausentes</th><th style='text-align:center'>Tardes</th>" +
+    "<th style='text-align:center'>% Asist.</th><th>Estado</th>" +
+  "</tr></thead><tbody>";
+  r.data.forEach(function(a) {
+    var riesgo = a.ausentes >= UMBRAL_RIESGO;
+    var pct = a.porcentaje || 0;
+    html += "<tr"+(riesgo?" class='riesgo'":"")+"><td><strong>"+a.apellido_nombre+"</strong></td>" +
+      "<td style='text-align:center'>"+a.grado+"°"+a.seccion+"</td>" +
+      "<td style='text-align:center'>"+a.presentes+"</td>" +
+      "<td style='text-align:center;font-weight:600;color:#C62828'>"+a.ausentes+"</td>" +
+      "<td style='text-align:center;color:#F57F17'>"+a.tardes+"</td>" +
+      "<td style='text-align:center;font-weight:600'>"+pct+"%</td>" +
+      "<td>"+(riesgo?"<span class='badge-risk'>⚠ Intensificación</span>":"<span class='badge-ok'>✓ Regular</span>")+"</td></tr>";
+  });
+  html += "</tbody></table>";
+  html += "<div class='pie'>PM Digital &nbsp;·&nbsp; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;·&nbsp; Ciclo " + APP.cicloLectivo + "</div>";
+  html += "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>";
+  html += "</body></html>";
+  var win = window.open("","_blank"); win.document.write(html); win.document.close();
 }
 
 function generarReporteDocentes() {
@@ -2080,7 +2177,6 @@ function generarReporteDocentes() {
       el.innerHTML = "<div class=\"alert alert-info\">Sin ausencias en ese período.</div>";
       return;
     }
-    // Agrupar por docente
     var porDocente = {};
     res.data.forEach(function(a) {
       if (!porDocente[a.docente_nombre]) porDocente[a.docente_nombre] = [];
@@ -2104,8 +2200,45 @@ function generarReporteDocentes() {
       "</tr>";
     });
     html += "</tbody></table></div>";
+    html += "<button class=\"btn btn-outline\" style=\"margin-top:8px\" onclick=\"imprimirReporteDocentes()\">🖨️ Imprimir / Guardar PDF</button>";
     el.innerHTML = html;
+
+    window._lastReporteDoc = { data: res.data, desde: desde, hasta: hasta, porDocente: porDocente };
   });
+}
+
+function imprimirReporteDocentes() {
+  var r = window._lastReporteDoc;
+  if (!r) return;
+  var subtitulo = "Ausencias Docentes &nbsp;|&nbsp; Del " + r.desde + " al " + r.hasta;
+  var html = _cabeceraReporte("Reporte de Ausencias Docentes", subtitulo);
+
+  html += "<div class='resumen'>" +
+    "<span>Total de ausencias: <b>"+r.data.length+"</b></span>" +
+    "<span>Docentes involucrados: <b>"+Object.keys(r.porDocente).length+"</b></span>" +
+  "</div>";
+
+  html += "<table><thead><tr>" +
+    "<th>Docente</th><th style='text-align:center'>Total ausencias</th><th>Motivos</th><th>Fechas</th>" +
+  "</tr></thead><tbody>";
+
+  Object.keys(r.porDocente).sort().forEach(function(doc) {
+    var ausencias = r.porDocente[doc];
+    var motivos = {};
+    ausencias.forEach(function(a){ motivos[a.motivo] = (motivos[a.motivo]||0)+1; });
+    var motivoStr = Object.keys(motivos).map(function(m){ return m+" ("+motivos[m]+")"; }).join(", ");
+    var fechasStr = ausencias.map(function(a){ return a.fecha; }).join(", ");
+    html += "<tr><td><strong>"+doc+"</strong></td>" +
+      "<td style='text-align:center;font-weight:600;color:#C62828'>"+ausencias.length+"</td>" +
+      "<td>"+motivoStr+"</td>" +
+      "<td style='font-size:11px;color:#555'>"+fechasStr+"</td></tr>";
+  });
+
+  html += "</tbody></table>";
+  html += "<div class='pie'>PM Digital &nbsp;·&nbsp; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;·&nbsp; Ciclo " + APP.cicloLectivo + "</div>";
+  html += "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>";
+  html += "</body></html>";
+  var win = window.open("","_blank"); win.document.write(html); win.document.close();
 }
 
 function generarReporteAccidentes() {
@@ -2132,8 +2265,43 @@ function generarReporteAccidentes() {
       "</tr>";
     });
     html += "</tbody></table></div>";
+    html += "<button class=\"btn btn-outline\" style=\"margin-top:8px\" onclick=\"imprimirReporteAccidentes()\">🖨️ Imprimir / Guardar PDF</button>";
     el.innerHTML = html;
+
+    window._lastReporteAccid = { data: res.data, desde: desde, hasta: hasta };
   });
+}
+
+function imprimirReporteAccidentes() {
+  var r = window._lastReporteAccid;
+  if (!r) return;
+  var subtitulo = "Accidentes Escolares &nbsp;|&nbsp; Del " + r.desde + " al " + r.hasta;
+  var html = _cabeceraReporte("Reporte de Accidentes Escolares", subtitulo);
+
+  html += "<div class='resumen'>" +
+    "<span>Total de accidentes registrados: <b>"+r.data.length+"</b></span>" +
+  "</div>";
+
+  html += "<table><thead><tr>" +
+    "<th>Fecha</th><th>Alumno/a</th><th>Grado</th><th>Hora</th><th>Lugar</th><th>Lesiones</th>" +
+  "</tr></thead><tbody>";
+
+  r.data.forEach(function(a) {
+    html += "<tr>" +
+      "<td>"+a.fecha+"</td>" +
+      "<td><strong>"+a.apellido_nombre+"</strong></td>" +
+      "<td style='text-align:center'>"+a.grado+"°"+a.seccion+"</td>" +
+      "<td style='text-align:center'>"+( a.hora||"—")+"</td>" +
+      "<td>"+a.lugar+"</td>" +
+      "<td style='font-size:11px'>"+( a.lesiones||"—")+"</td>" +
+    "</tr>";
+  });
+
+  html += "</tbody></table>";
+  html += "<div class='pie'>PM Digital &nbsp;·&nbsp; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;·&nbsp; Ciclo " + APP.cicloLectivo + "</div>";
+  html += "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>";
+  html += "</body></html>";
+  var win = window.open("","_blank"); win.document.write(html); win.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
