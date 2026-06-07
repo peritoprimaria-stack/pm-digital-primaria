@@ -448,6 +448,7 @@ function construirMenu() {
     {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario"]},
     {id:"reportes", icon:"📈", label:"Reportes", roles:["director","vicedirector","secretario"]},
     {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario"]},
+    {id:"reuniones", icon:"🤝", label:"Reuniones de Padres", roles:["director","vicedirector","secretario","maestro"]},
     {section:"EOE", roles:["director","vicedirector","secretario","eoe"]},
     {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe"]},
     {section:"Comunicación", roles:["director","vicedirector","secretario","maestro","eoe"]},
@@ -485,7 +486,8 @@ function navegarA(pagina) {
 
   var titulos = {
     dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
-    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes", ausencias_docentes:"Ausencias Docentes",
+    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes",
+    ausencias_docentes:"Ausencias Docentes", reuniones:"Reuniones de Padres",
     legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios", configuracion:"Configuración"
   };
   document.getElementById("pageTitle").textContent = titulos[pagina] || pagina;
@@ -499,6 +501,7 @@ function navegarA(pagina) {
     horarios: renderHorarios,
     reportes: renderReportes,
     ausencias_docentes: renderAusenciasDocentes,
+    reuniones: renderReuniones,
     legajos: renderLegajos,
     mensajes: renderMensajes,
     usuarios: renderUsuarios,
@@ -2763,7 +2766,6 @@ function calcularImpactoAusencia(nombreDocente, fecha) {
 }
 
 function abrirModalAusenciaDocente() {
-  // Armar lista de docentes desde _docentes (lista completa real)
   var listaDocentes = (HORARIO_2026._docentes || []).slice().sort(function(a,b){
     return a.nombre.localeCompare(b.nombre);
   });
@@ -2779,42 +2781,327 @@ function abrirModalAusenciaDocente() {
       '</select></div>' +
     '<div id="adImpacto" style="margin-bottom:12px"></div>' +
     '<div class="form-group"><label class="form-label">Motivo</label>' +
-      '<select id="adMotivo" class="form-control">' +
+      '<select id="adMotivo" class="form-control" onchange="toggleOtraAusencia()">' +
         '<option>Enfermedad</option><option>Licencia</option><option>Capacitación</option><option>Otro</option>' +
       '</select></div>' +
+    '<div class="form-group" id="adOtraWrap" style="display:none">' +
+      '<label class="form-label">Especificá el motivo *</label>' +
+      '<input id="adOtraTexto" class="form-control" placeholder="Describí el motivo...">' +
+    '</div>' +
     '<div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>',
     [{label:"💾 Registrar", cls:"btn-primary", fn:"registrarAusenciaDocenteSubmit()"}]
   );
 }
 
-function previsualizarImpacto() {
-  var nombre = v("adNombre");
-  var fecha  = v("adFecha");
-  var el     = document.getElementById("adImpacto");
-  if (!nombre || !fecha || !el) return;
-
-  var impacto = calcularImpactoAusencia(nombre, fecha);
-  if (impacto.length === 0) {
-    el.innerHTML = '<div class="alert alert-info" style="font-size:12px">Este docente no tiene horas ese día.</div>';
-  } else {
-    el.innerHTML =
-      '<div class="alert alert-warning" style="font-size:12px">' +
-        '<strong>⚠️ Horas sin cubrir:</strong><br>' +
-        impacto.map(function(i){ return '• '+i; }).join('<br>') +
-      '</div>';
-  }
+function toggleOtraAusencia() {
+  var motivo = v("adMotivo");
+  var wrap   = document.getElementById("adOtraWrap");
+  if (wrap) wrap.style.display = motivo === "Otro" ? "block" : "none";
 }
 
 function registrarAusenciaDocenteSubmit() {
   var nombre = v("adNombre");
   if (!nombre) { toast("Seleccioná un docente"); return; }
+  var motivo = v("adMotivo");
+  if (motivo === "Otro") {
+    var otra = v("adOtraTexto").trim();
+    if (!otra) { toast("Especificá el motivo"); return; }
+    motivo = "Otro: " + otra;
+  }
   callBackend("registrarAusenciaDocente", {
     fecha: v("adFecha"), docente_nombre: nombre,
-    motivo: v("adMotivo"), reemplazante: v("adReemplazante")
+    motivo: motivo, reemplazante: v("adReemplazante")
   }, function(res) {
     if (res.ok) { cerrarModal(); toast("✅ Ausencia registrada"); cargarAusenciasDocentes(); }
     else toast("❌ " + res.error);
   });
+}
+
+// ════════════════════════════════════════════════════════════
+// REUNIONES DE PADRES
+// ════════════════════════════════════════════════════════════
+var _reunAlumnosCache = [];
+
+function renderReuniones() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML =
+    '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div class="card-title" style="margin:0">🤝 Reuniones de Padres</div>' +
+        '<button class="btn btn-primary" onclick="abrirModalNuevaReunion()">+ Nueva citación</button>' +
+      '</div>' +
+      '<div class="filtros">' +
+        '<input type="date" id="reunDesde" class="form-control" style="width:160px" value="'+primerDiaMes()+'">' +
+        '<input type="date" id="reunHasta" class="form-control" style="width:160px" value="'+fechaHoy()+'">' +
+        '<button class="btn btn-outline" onclick="cargarReuniones()">🔍 Buscar</button>' +
+      '</div>' +
+      '<div id="reunList" style="margin-top:16px">Cargando...</div>' +
+    '</div>';
+  cargarReuniones();
+}
+
+function primerDiaMes() {
+  var h = new Date();
+  return h.getFullYear()+"-"+(h.getMonth()+1<10?"0":"")+(h.getMonth()+1)+"-01";
+}
+
+function cargarReuniones() {
+  var desde = document.getElementById("reunDesde").value;
+  var hasta = document.getElementById("reunHasta").value;
+  callBackend("getReuniones", {desde: desde, hasta: hasta}, function(res) {
+    var el = document.getElementById("reunList");
+    if (!el) return;
+    if (!res.ok || !res.data || res.data.length === 0) {
+      el.innerHTML = '<div class="alert alert-info">Sin reuniones registradas en ese período.</div>';
+      return;
+    }
+    var html = '<div class="table-container"><table class="data-table"><thead><tr>' +
+      '<th>Fecha</th><th>Alumno/a</th><th>Grado</th><th>Motivo</th><th>Citado por</th><th>Acciones</th>' +
+      '</tr></thead><tbody>';
+    res.data.forEach(function(r) {
+      html += '<tr>' +
+        '<td>'+r.fecha+'</td>' +
+        '<td><strong>'+r.apellido_nombre+'</strong></td>' +
+        '<td style="text-align:center">'+r.grado+'°'+r.seccion+'</td>' +
+        '<td><span style="font-size:12px">'+r.motivo+'</span></td>' +
+        '<td style="font-size:12px;color:var(--text-light)">'+r.citado_por+'</td>' +
+        '<td>' +
+          '<button class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-right:4px" onclick="verReunion(\''+r.id_reunion+'\')">Ver</button>' +
+          '<button class="btn btn-primary" style="padding:2px 8px;font-size:11px" onclick="imprimirCitacion(\''+r.id_reunion+'\')">🖨️</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  });
+}
+
+function abrirModalNuevaReunion() {
+  _reunAlumnosCache = [];
+  var gradoOpts = [1,2,3,4,5,6].map(function(g){
+    return '<option value="'+g+'">'+g+'°</option>';
+  }).join('');
+
+  abrirModal("+ Nueva Citación a Padres",
+    '<div class="form-grid">' +
+      '<div class="form-group">' +
+        '<label class="form-label">Grado *</label>' +
+        '<select id="reunGrado" class="form-control" onchange="cargarAlumnosReunion()">' +
+          '<option value="">— Seleccioná —</option>' + gradoOpts +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Sección *</label>' +
+        '<select id="reunSeccion" class="form-control" onchange="cargarAlumnosReunion()">' +
+          '<option value="">— Seleccioná —</option><option>A</option><option>B</option>' +
+        '</select>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-group" id="reunAlumnoWrap" style="display:none">' +
+      '<label class="form-label">Alumno/a *</label>' +
+      '<select id="reunAlumno" class="form-control">' +
+        '<option value="">— Seleccioná —</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Fecha de la reunión *</label>' +
+      '<input id="reunFecha" type="date" class="form-control" value="'+fechaHoy()+'">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Hora (opcional)</label>' +
+      '<input id="reunHora" type="time" class="form-control">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Citado/a por *</label>' +
+      '<input id="reunCitadoPor" class="form-control" value="'+(APP.usuario.nombre+' '+APP.usuario.apellido)+'" placeholder="Nombre del docente o directivo">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Motivo *</label>' +
+      '<select id="reunMotivo" class="form-control" onchange="toggleMotivoOtraReunion()">' +
+        '<option value="Asistencia">Asistencia</option>' +
+        '<option value="Problemáticas de aprendizaje">Problemáticas de aprendizaje</option>' +
+        '<option value="Conducta">Conducta</option>' +
+        '<option value="Seguimiento EOE">Seguimiento EOE</option>' +
+        '<option value="Otro">Otro (especificar)</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group" id="reunOtraWrap" style="display:none">' +
+      '<label class="form-label">Especificá el motivo *</label>' +
+      '<input id="reunOtraTexto" class="form-control" placeholder="Describí el motivo...">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Observaciones (opcional)</label>' +
+      '<textarea id="reunObs" class="form-control" rows="3" placeholder="Información adicional para los padres..."></textarea>' +
+    '</div>',
+    [{label:"💾 Guardar citación", cls:"btn-primary", fn:"guardarReunionSubmit()"}]
+  );
+}
+
+function cargarAlumnosReunion() {
+  var grado   = v("reunGrado");
+  var seccion = v("reunSeccion");
+  if (!grado || !seccion) return;
+  callBackend("getAlumnos", {grado: grado, seccion: seccion, ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    _reunAlumnosCache = res.ok ? res.data : [];
+    var sel = document.getElementById("reunAlumno");
+    var wrap = document.getElementById("reunAlumnoWrap");
+    if (!sel || !wrap) return;
+    sel.innerHTML = '<option value="">— Seleccioná —</option>' +
+      _reunAlumnosCache.map(function(a){
+        return '<option value=\''+JSON.stringify({id:a.id_alumno,nombre:a.apellido+", "+a.nombre,grado:a.grado,seccion:a.seccion}).replace(/'/g,"&apos;")+'\'>'
+          +a.apellido+', '+a.nombre+'</option>';
+      }).join('');
+    wrap.style.display = "block";
+  });
+}
+
+function toggleMotivoOtraReunion() {
+  var motivo = v("reunMotivo");
+  var wrap   = document.getElementById("reunOtraWrap");
+  if (wrap) wrap.style.display = motivo === "Otro" ? "block" : "none";
+}
+
+function guardarReunionSubmit() {
+  var alumnoRaw = v("reunAlumno");
+  if (!alumnoRaw) { toast("Seleccioná un alumno"); return; }
+  var alumno;
+  try { alumno = JSON.parse(alumnoRaw); } catch(e) { toast("Error al leer el alumno"); return; }
+  var motivo = v("reunMotivo");
+  if (motivo === "Otro") {
+    var otra = v("reunOtraTexto").trim();
+    if (!otra) { toast("Especificá el motivo"); return; }
+    motivo = "Otro: " + otra;
+  }
+  if (!v("reunFecha")) { toast("Completá la fecha"); return; }
+  if (!v("reunCitadoPor")) { toast("Completá quién cita"); return; }
+
+  callBackend("registrarReunion", {
+    id_alumno:       alumno.id,
+    apellido_nombre: alumno.nombre,
+    grado:           String(alumno.grado),
+    seccion:         alumno.seccion,
+    fecha:           v("reunFecha"),
+    hora:            v("reunHora"),
+    citado_por:      v("reunCitadoPor"),
+    motivo:          motivo,
+    observaciones:   v("reunObs")
+  }, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Citación registrada");
+      cargarReuniones();
+      // Ofrecer imprimir
+      setTimeout(function(){
+        if (confirm("¿Querés imprimir la citación ahora?")) {
+          imprimirCitacionDirecta(res.data);
+        }
+      }, 300);
+    } else toast("❌ " + res.error);
+  });
+}
+
+function verReunion(id) {
+  callBackend("getReunion", {id_reunion: id}, function(res) {
+    if (!res.ok) { toast("Error al cargar"); return; }
+    var r = res.data;
+    abrirModal("🤝 Citación — "+r.apellido_nombre,
+      '<div class="form-grid" style="margin-bottom:12px">' +
+        '<div><b>Alumno/a:</b> '+r.apellido_nombre+'</div>' +
+        '<div><b>Grado:</b> '+r.grado+'° '+r.seccion+'</div>' +
+        '<div><b>Fecha:</b> '+r.fecha+(r.hora?' — '+r.hora:'')+'</div>' +
+        '<div><b>Citado por:</b> '+r.citado_por+'</div>' +
+        '<div><b>Motivo:</b> '+r.motivo+'</div>' +
+      '</div>' +
+      (r.observaciones ? '<div class="alert alert-info">'+r.observaciones+'</div>' : ''),
+      [{label:"🖨️ Imprimir citación", cls:"btn-primary", fn:"imprimirCitacion('"+id+"')"}]
+    );
+  });
+}
+
+function imprimirCitacion(id) {
+  callBackend("getReunion", {id_reunion: id}, function(res) {
+    if (!res.ok) { toast("Error al cargar"); return; }
+    imprimirCitacionDirecta(res.data);
+  });
+}
+
+function imprimirCitacionDirecta(r) {
+  var esc   = (APP.config && APP.config.NOMBRE_ESCUELA)    || "Escuela Primaria";
+  var cue   = (APP.config && APP.config.CUE)               || "";
+  var dist  = (APP.config && APP.config.DISTRITO)          || "";
+  var dom   = (APP.config && APP.config.DOMICILIO_ESCUELA) || "";
+
+  var fechaObj = new Date(r.fecha + "T12:00:00");
+  var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var fechaStr = fechaObj.getDate() + " de " + meses[fechaObj.getMonth()] + " de " + fechaObj.getFullYear();
+
+  var hoy = new Date();
+  var hoyStr = hoy.getDate() + " de " + meses[hoy.getMonth()] + " de " + hoy.getFullYear();
+
+  var html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Citación — "+r.apellido_nombre+"</title>" +
+    "<style>" +
+      "*{box-sizing:border-box;margin:0;padding:0}" +
+      "body{font-family:Arial,sans-serif;font-size:13px;color:#000;padding:32px 40px;max-width:750px;margin:0 auto}" +
+      ".cabecera{text-align:center;border-bottom:2px solid #B71C1C;padding-bottom:12px;margin-bottom:20px}" +
+      ".escuela{font-size:18px;font-weight:bold;color:#B71C1C;margin-bottom:4px}" +
+      ".meta{font-size:11px;color:#555}" +
+      ".fecha-emision{text-align:right;font-size:12px;margin-bottom:20px;color:#555}" +
+      ".titulo{text-align:center;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;margin-bottom:24px;color:#212121}" +
+      "p{margin-bottom:14px;line-height:1.8}" +
+      ".dato{border-bottom:1px solid #000;display:inline-block;min-width:80px;padding:0 4px}" +
+      ".motivo-box{border:1px solid #ccc;border-radius:6px;padding:10px 14px;margin:16px 0;background:#fafafa;font-size:13px}" +
+      ".firma-bloque{margin-top:48px;display:flex;justify-content:space-between}" +
+      ".firma-item{text-align:center;width:42%}" +
+      ".firma-linea{border-top:1px solid #000;padding-top:6px;font-size:11px;margin-top:6px}" +
+      ".no-print{text-align:center;margin:20px 0}" +
+      ".btn-imp{padding:10px 24px;background:#B71C1C;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}" +
+      "@media print{.no-print{display:none}}" +
+    "</style></head><body>" +
+
+    "<div class='cabecera'>" +
+      "<div class='escuela'>"+esc+"</div>" +
+      "<div class='meta'>"+(cue?"CUE: "+cue+" &nbsp;|&nbsp; ":"")+(dist?"Distrito: "+dist+" &nbsp;|&nbsp; ":"")+(dom?dom:"")+"</div>" +
+    "</div>" +
+
+    "<div class='fecha-emision'>"+esc+", "+hoyStr+"</div>" +
+
+    "<div class='titulo'>Citación a Padres / Tutores</div>" +
+
+    "<p>Por medio de la presente, se cita al padre/madre o tutor/a del alumno/a:</p>" +
+
+    "<p style='font-size:15px;font-weight:bold;text-align:center;margin:16px 0'>" +
+      r.apellido_nombre + " &nbsp;—&nbsp; " + r.grado + "° " + r.seccion +
+    "</p>" +
+
+    "<p>Se solicita su presencia en el establecimiento el día <span class='dato'>"+fechaStr+"</span>" +
+    (r.hora ? " a las <span class='dato'>"+r.hora+"</span> hs." : "") + ".</p>" +
+
+    "<p><strong>Motivo de la citación:</strong></p>" +
+    "<div class='motivo-box'>"+r.motivo+"</div>" +
+
+    (r.observaciones
+      ? "<p><strong>Observaciones:</strong><br>"+r.observaciones+"</p>"
+      : "") +
+
+    "<p>Ante cualquier inconveniente para concurrir en el horario indicado, comuníquese con la institución para coordinar una nueva fecha.</p>" +
+
+    "<div class='firma-bloque'>" +
+      "<div class='firma-item'>" +
+        (APP.firmaBase64 ? "<img src='"+APP.firmaBase64+"' style='max-height:50px;max-width:160px;display:block;margin:0 auto 4px'>" : "<div style='height:50px'></div>") +
+        "<div class='firma-linea'><strong>"+(APP.directivoNombre||"")+"</strong><br>"+(APP.directivoCargo||"Directora/Director")+"</div>" +
+      "</div>" +
+      "<div class='firma-item'>" +
+        "<div style='height:50px'></div>" +
+        "<div class='firma-linea'>Firma y aclaración del padre/madre o tutor/a</div>" +
+      "</div>" +
+    "</div>" +
+
+    "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>" +
+    "</body></html>";
+
+  var win = window.open("","_blank");
+  win.document.write(html);
+  win.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
