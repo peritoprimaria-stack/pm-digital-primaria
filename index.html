@@ -2822,6 +2822,38 @@ function registrarAusenciaDocenteSubmit() {
 // ════════════════════════════════════════════════════════════
 var _reunAlumnosCache = [];
 
+function _opcionesCitadoPor() {
+  // Armar lista: primero directivos, luego docentes ordenados
+  var usuarioActual = APP.usuario.nombre + " " + APP.usuario.apellido;
+  var opciones = [];
+
+  // Directivos desde config
+  var nombreDir = (APP.directivoNombre) || (APP.config && APP.config.DIRECTIVO_NOMBRE) || "";
+  var cargoDir  = (APP.directivoCargo)  || (APP.config && APP.config.DIRECTIVO_CARGO)  || "Directora";
+  if (nombreDir) opciones.push({ valor: nombreDir, label: nombreDir + " — " + cargoDir });
+
+  // Docentes del horario
+  var docentes = (HORARIO_2026._docentes || []).slice().sort(function(a,b){
+    return a.nombre.localeCompare(b.nombre);
+  });
+  docentes.forEach(function(d) {
+    if (d.nombre !== nombreDir) {
+      opciones.push({ valor: d.nombre, label: d.nombre + " — " + d.rol });
+    }
+  });
+
+  // Si el usuario actual no está en ninguna lista, agregarlo primero
+  var estaEnLista = opciones.some(function(o){ return o.valor === usuarioActual; });
+  if (!estaEnLista && usuarioActual.trim()) {
+    opciones.unshift({ valor: usuarioActual, label: usuarioActual + " — " + APP.usuario.rol });
+  }
+
+  return opciones.map(function(o) {
+    var sel = o.valor === usuarioActual ? " selected" : "";
+    return '<option value="'+o.valor+'"'+sel+'>'+o.label+'</option>';
+  }).join('');
+}
+
 function renderReuniones() {
   var pc = document.getElementById("pageContent");
   pc.innerHTML =
@@ -2913,7 +2945,9 @@ function abrirModalNuevaReunion() {
     '</div>' +
     '<div class="form-group">' +
       '<label class="form-label">Citado/a por *</label>' +
-      '<input id="reunCitadoPor" class="form-control" value="'+(APP.usuario.nombre+' '+APP.usuario.apellido)+'" placeholder="Nombre del docente o directivo">' +
+      '<select id="reunCitadoPor" class="form-control">' +
+        _opcionesCitadoPor() +
+      '</select>' +
     '</div>' +
     '<div class="form-group">' +
       '<label class="form-label">Motivo *</label>' +
@@ -3088,7 +3122,7 @@ function imprimirCitacionDirecta(r) {
     "<div class='firma-bloque'>" +
       "<div class='firma-item'>" +
         (APP.firmaBase64 ? "<img src='"+APP.firmaBase64+"' style='max-height:50px;max-width:160px;display:block;margin:0 auto 4px'>" : "<div style='height:50px'></div>") +
-        "<div class='firma-linea'><strong>"+(APP.directivoNombre||"")+"</strong><br>"+(APP.directivoCargo||"Directora/Director")+"</div>" +
+        "<div class='firma-linea'>"+(APP.directivoNombre||"")+"<br><strong>"+(APP.directivoCargo||"Directora")+"</strong></div>" +
       "</div>" +
       "<div class='firma-item'>" +
         "<div style='height:50px'></div>" +
@@ -3410,7 +3444,7 @@ function _bloquesFirmaHTML() {
     "<div style='text-align:center;min-width:180px'>" +
       imgHtml +
       "<div style='border-top:1px solid #000;padding-top:4px;font-size:11px'>" +
-        "<strong>" + nombre + "</strong><br>" + cargo +
+        nombre + "<br><strong>" + cargo + "</strong>" +
       "</div>" +
     "</div>" +
   "</div>";
