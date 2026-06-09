@@ -2851,41 +2851,6 @@ function renderListaAusencias(data) {
   html += '</tbody></table></div>';
   el.innerHTML = html;
 }
-  var pc = document.getElementById("pageContent");
-  pc.innerHTML =
-    '<div class="card">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div class="card-title" style="margin:0">👨‍🏫 Ausencias Docentes</div>' +
-        '<button class="btn btn-primary" onclick="abrirModalAusenciaDocente()">+ Registrar ausencia</button>' +
-      '</div>' +
-      '<div class="filtros">' +
-        '<input type="date" id="ausDocFecha" class="form-control" style="width:180px" value="'+fechaHoy()+'" onchange="cargarAusenciasDocentes()">' +
-      '</div>' +
-      '<div id="ausDocentesList">Cargando...</div>' +
-    '</div>';
-  cargarAusenciasDocentes();
-}
-
-function cargarAusenciasDocentes() {
-  var fecha = document.getElementById("ausDocFecha").value;
-  callBackend("getAusenciasDocentes", {fecha: fecha}, function(res) {
-    if (!res.ok || res.data.length === 0) {
-      document.getElementById("ausDocentesList").innerHTML = '<div class="alert alert-info">Sin ausencias registradas para esta fecha.</div>';
-      return;
-    }
-    var html = '<div class="table-container"><table class="data-table"><thead><tr><th>Docente</th><th>Horas afectadas</th><th>Motivo</th><th>Reemplazante</th></tr></thead><tbody>';
-    res.data.forEach(function(a) {
-      // Calcular impacto en el horario
-      var impacto = calcularImpactoAusencia(a.docente_nombre, fecha);
-      var impactoHtml = impacto.length > 0
-        ? impacto.map(function(i){ return '<span style="background:#fff3cd;padding:1px 6px;border-radius:3px;font-size:11px;margin:1px;display:inline-block">'+i+'</span>'; }).join(' ')
-        : '<span style="color:#ccc;font-size:12px">—</span>';
-      html += '<tr><td><strong>'+a.docente_nombre+'</strong></td><td>'+impactoHtml+'</td><td>'+a.motivo+'</td><td>'+(a.reemplazante||'—')+'</td></tr>';
-    });
-    html += '</tbody></table></div>';
-    document.getElementById("ausDocentesList").innerHTML = html;
-  });
-}
 
 function calcularImpactoAusencia(nombreDocente, fecha) {
   // Convierte la fecha en día de la semana
