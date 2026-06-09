@@ -2702,6 +2702,155 @@ function mostrarHorario() {
 // AUSENCIAS DOCENTES
 // ════════════════════════════════════════════════════════════
 function renderAusenciasDocentes() {
+  var hoy  = new Date();
+  var mes  = hoy.getMonth();
+  var anio = hoy.getFullYear();
+
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML =
+    '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div class="card-title" style="margin:0">👨‍🏫 Ausencias Docentes</div>' +
+        '<button class="btn btn-primary" onclick="abrirModalAusenciaDocente()">+ Registrar ausencia</button>' +
+      '</div>' +
+      // Navegación del calendario
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">' +
+        '<button class="btn btn-outline" style="padding:4px 12px" onclick="cambiarMesAusencias(-1)">◀</button>' +
+        '<span id="adMesLabel" style="font-weight:600;font-size:15px;min-width:160px;text-align:center"></span>' +
+        '<button class="btn btn-outline" style="padding:4px 12px" onclick="cambiarMesAusencias(1)">▶</button>' +
+        '<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="irMesActualAusencias()">Hoy</button>' +
+      '</div>' +
+      '<div id="adCalendario" style="margin-bottom:20px"></div>' +
+      '<div class="card-title" style="font-size:13px;margin-bottom:8px">📋 Listado del mes</div>' +
+      '<div id="adLista">Cargando...</div>' +
+    '</div>';
+
+  APP._adMes  = mes;
+  APP._adAnio = anio;
+  cargarAusenciasDocentes();
+}
+
+function cambiarMesAusencias(delta) {
+  APP._adMes += delta;
+  if (APP._adMes > 11) { APP._adMes = 0;  APP._adAnio++; }
+  if (APP._adMes < 0)  { APP._adMes = 11; APP._adAnio--; }
+  cargarAusenciasDocentes();
+}
+
+function irMesActualAusencias() {
+  var h = new Date();
+  APP._adMes  = h.getMonth();
+  APP._adAnio = h.getFullYear();
+  cargarAusenciasDocentes();
+}
+
+function cargarAusenciasDocentes() {
+  var mes  = APP._adMes;
+  var anio = APP._adAnio;
+  var desde = anio+"-"+(mes+1<10?"0":"")+(mes+1)+"-01";
+  var ultimoDia = new Date(anio, mes+1, 0).getDate();
+  var hasta = anio+"-"+(mes+1<10?"0":"")+(mes+1)+"-"+(ultimoDia<10?"0":"")+ultimoDia;
+
+  var label = document.getElementById("adMesLabel");
+  var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  if (label) label.textContent = meses[mes] + " " + anio;
+
+  callBackend("getReporteAusenciasDocentes", {desde: desde, hasta: hasta}, function(res) {
+    var data = (res.ok && res.data) ? res.data : [];
+    renderCalendarioAusencias(data, mes, anio);
+    renderListaAusencias(data);
+  });
+}
+
+function renderCalendarioAusencias(data, mes, anio) {
+  var el = document.getElementById("adCalendario");
+  if (!el) return;
+
+  // Agrupar ausencias por fecha — expandir rangos
+  var porFecha = {};
+  data.forEach(function(a) {
+    var d1 = new Date((a.fecha||"")+"T12:00:00");
+    var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+    for (var d = new Date(d1); d <= d2; d.setDate(d.getDate()+1)) {
+      var key = d.getFullYear()+"-"+(d.getMonth()+1<10?"0":"")+(d.getMonth()+1)+"-"+(d.getDate()<10?"0":"")+d.getDate();
+      if (!porFecha[key]) porFecha[key] = [];
+      porFecha[key].push(a.docente_nombre);
+    }
+  });
+
+  var diasSemana = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  var primerDia  = new Date(anio, mes, 1).getDay();
+  var totalDias  = new Date(anio, mes+1, 0).getDate();
+  var hoy        = new Date();
+  var esEsteMes  = hoy.getMonth()===mes && hoy.getFullYear()===anio;
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+
+  // Headers días semana
+  diasSemana.forEach(function(d) {
+    html += '<div style="text-align:center;font-size:11px;font-weight:600;color:var(--text-light);padding:4px">'+d+'</div>';
+  });
+
+  // Celdas vacías hasta el primer día
+  for (var i = 0; i < primerDia; i++) {
+    html += '<div></div>';
+  }
+
+  // Días del mes
+  for (var dia = 1; dia <= totalDias; dia++) {
+    var key = anio+"-"+(mes+1<10?"0":"")+(mes+1)+"-"+(dia<10?"0":"")+dia;
+    var ausentes = porFecha[key] || [];
+    var esHoy = esEsteMes && hoy.getDate()===dia;
+
+    var bg     = ausentes.length > 0 ? "#fff5f5" : "#fafafa";
+    var border = esHoy ? "2px solid #B71C1C" : "1px solid var(--border)";
+    var numColor = esHoy ? "#B71C1C" : "#333";
+
+    html += '<div style="min-height:60px;background:'+bg+';border:'+border+';border-radius:6px;padding:4px 5px;font-size:11px">' +
+      '<div style="font-weight:600;color:'+numColor+';margin-bottom:2px">'+dia+'</div>';
+
+    ausentes.slice(0,3).forEach(function(nombre) {
+      // Mostrar solo apellido para que entre
+      var apellido = nombre.split(" ")[0];
+      html += '<div style="background:#B71C1C;color:#fff;border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="'+nombre+'">'+apellido+'</div>';
+    });
+    if (ausentes.length > 3) {
+      html += '<div style="color:var(--text-light);font-size:10px">+' + (ausentes.length-3) + ' más</div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderListaAusencias(data) {
+  var el = document.getElementById("adLista");
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div class="alert alert-info">Sin ausencias en este mes.</div>';
+    return;
+  }
+  var html = '<div class="table-container"><table class="data-table"><thead><tr>' +
+    '<th>Docente</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Motivo</th><th>Reemplazante</th>' +
+    '</tr></thead><tbody>';
+  data.forEach(function(a) {
+    var d1 = new Date((a.fecha||"")+"T12:00:00");
+    var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+    var dias = Math.round((d2-d1)/(1000*60*60*24))+1;
+    html += '<tr>' +
+      '<td><strong>'+a.docente_nombre+'</strong></td>' +
+      '<td>'+a.fecha+'</td>' +
+      '<td>'+(a.fecha_hasta && a.fecha_hasta !== a.fecha ? a.fecha_hasta : '—')+'</td>' +
+      '<td style="text-align:center;font-weight:600;color:'+(dias>1?"var(--danger)":"inherit")+'">'+dias+'</td>' +
+      '<td style="font-size:12px">'+a.motivo+'</td>' +
+      '<td style="font-size:12px;color:var(--text-light)">'+(a.reemplazante||'—')+'</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
   var pc = document.getElementById("pageContent");
   pc.innerHTML =
     '<div class="card">' +
@@ -2782,11 +2931,17 @@ function abrirModalAusenciaDocente() {
   }).join('');
 
   abrirModal("+ Registrar Ausencia Docente",
-    '<div class="form-group"><label class="form-label">Fecha</label><input id="adFecha" type="date" class="form-control" value="'+fechaHoy()+'" onchange="previsualizarImpacto()"></div>' +
     '<div class="form-group"><label class="form-label">Docente *</label>' +
       '<select id="adNombre" class="form-control" onchange="previsualizarImpacto()">' +
         '<option value="">— Seleccioná —</option>' + docenteOpts +
       '</select></div>' +
+    '<div class="form-grid">' +
+      '<div class="form-group"><label class="form-label">Fecha desde *</label>' +
+        '<input id="adFecha" type="date" class="form-control" value="'+fechaHoy()+'" onchange="actualizarHasta();previsualizarImpacto()"></div>' +
+      '<div class="form-group"><label class="form-label">Fecha hasta *</label>' +
+        '<input id="adFechaHasta" type="date" class="form-control" value="'+fechaHoy()+'" onchange="calcularDiasAusencia()"></div>' +
+    '</div>' +
+    '<div id="adDiasInfo" style="margin-bottom:12px;font-size:13px;color:var(--text-light)">1 día</div>' +
     '<div id="adImpacto" style="margin-bottom:12px"></div>' +
     '<div class="form-group"><label class="form-label">Motivo</label>' +
       '<select id="adMotivo" class="form-control" onchange="toggleOtraAusencia()">' +
@@ -2801,6 +2956,26 @@ function abrirModalAusenciaDocente() {
   );
 }
 
+function actualizarHasta() {
+  var desde = document.getElementById("adFecha");
+  var hasta  = document.getElementById("adFechaHasta");
+  if (desde && hasta && hasta.value < desde.value) hasta.value = desde.value;
+  calcularDiasAusencia();
+}
+
+function calcularDiasAusencia() {
+  var desde = v("adFecha");
+  var hasta  = v("adFechaHasta");
+  var el     = document.getElementById("adDiasInfo");
+  if (!desde || !hasta || !el) return;
+  var d1 = new Date(desde+"T12:00:00");
+  var d2 = new Date(hasta+"T12:00:00");
+  var dias = Math.round((d2-d1)/(1000*60*60*24)) + 1;
+  if (dias < 1) { document.getElementById("adFechaHasta").value = desde; dias = 1; }
+  el.textContent = dias === 1 ? "1 día" : dias + " días de ausencia";
+  el.style.color  = dias > 3 ? "var(--danger)" : "var(--text-light)";
+}
+
 function toggleOtraAusencia() {
   var motivo = v("adMotivo");
   var wrap   = document.getElementById("adOtraWrap");
@@ -2810,18 +2985,34 @@ function toggleOtraAusencia() {
 function registrarAusenciaDocenteSubmit() {
   var nombre = v("adNombre");
   if (!nombre) { toast("Seleccioná un docente"); return; }
+  var desde = v("adFecha");
+  var hasta  = v("adFechaHasta");
+  if (!desde || !hasta) { toast("Completá las fechas"); return; }
+  if (hasta < desde) { toast("La fecha hasta no puede ser anterior a la fecha desde"); return; }
+
   var motivo = v("adMotivo");
   if (motivo === "Otro") {
     var otra = v("adOtraTexto").trim();
     if (!otra) { toast("Especificá el motivo"); return; }
     motivo = "Otro: " + otra;
   }
+
+  // Si es un solo día, registrar una fila. Si es rango, registrar una fila con fecha_hasta
   callBackend("registrarAusenciaDocente", {
-    fecha: v("adFecha"), docente_nombre: nombre,
-    motivo: motivo, reemplazante: v("adReemplazante")
+    fecha:           desde,
+    fecha_hasta:     hasta,
+    docente_nombre:  nombre,
+    motivo:          motivo,
+    reemplazante:    v("adReemplazante")
   }, function(res) {
-    if (res.ok) { cerrarModal(); toast("✅ Ausencia registrada"); cargarAusenciasDocentes(); }
-    else toast("❌ " + res.error);
+    if (res.ok) {
+      cerrarModal();
+      var d1 = new Date(desde+"T12:00:00");
+      var d2 = new Date(hasta+"T12:00:00");
+      var dias = Math.round((d2-d1)/(1000*60*60*24))+1;
+      toast("✅ Ausencia registrada (" + dias + (dias===1?" día":" días") + ")");
+      cargarAusenciasDocentes();
+    } else toast("❌ " + res.error);
   });
 }
 
