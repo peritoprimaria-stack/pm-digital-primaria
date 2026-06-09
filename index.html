@@ -2151,17 +2151,18 @@ function renderReportes() {
         "<button class=\"btn btn-outline\" id=\"tabAccid\" onclick=\"mostrarTabReporte('accid')\" >🩹 Accidentes</button>" +
       "</div>" +
 
-      // Reporte asistencia alumnos
+      // Reporte asistencia alumnos — vista planilla
       "<div id=\"reporteAsist\">" +
-        "<div class=\"filtros\" style=\"margin-bottom:12px\">" +
+        "<div class=\"filtros\" style=\"margin-bottom:12px;flex-wrap:wrap;gap:8px\">" +
           "<select id=\"rpGrado\" class=\"form-control\" style=\"width:100px\">"+gradoOpts+"</select>" +
-          "<select id=\"rpSeccion\" class=\"form-control\" style=\"width:100px\">" +
-            "<option value=\"\">Todas</option><option value=\"A\">A</option><option value=\"B\">B</option>" +
+          "<select id=\"rpSeccion\" class=\"form-control\" style=\"width:80px\">" +
+            "<option value=\"A\">A</option><option value=\"B\">B</option>" +
           "</select>" +
-          "<select id=\"rpTrimestre\" class=\"form-control\" style=\"width:160px\">"+trimOpts+"</select>" +
-          "<button class=\"btn btn-primary\" onclick=\"generarReporteAsistencia()\">Generar</button>" +
+          "<input type=\"date\" id=\"rpDesde\" class=\"form-control\" style=\"width:150px\" value=\""+primerDiaMes()+"\">" +
+          "<input type=\"date\" id=\"rpHasta\" class=\"form-control\" style=\"width:150px\" value=\""+fechaHoy()+"\">" +
+          "<button class=\"btn btn-primary\" onclick=\"generarPlanillaAsistencia()\">📋 Ver planilla</button>" +
         "</div>" +
-        "<div id=\"rpAsistResult\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná los filtros y presioná Generar.</p></div>" +
+        "<div id=\"rpAsistResult\"><p style=\"color:var(--text-light);font-size:13px\">Seleccioná curso, sección y rango de fechas.</p></div>" +
       "</div>" +
 
       // Reporte ausencias docentes
@@ -2242,114 +2243,212 @@ function _cabeceraReporte(titulo, subtitulo) {
     "<div class='subtitulo-reporte'>"+subtitulo+"</div>";
 }
 
-function generarReporteAsistencia() {
-  var grado    = document.getElementById("rpGrado").value;
-  var seccion  = document.getElementById("rpSeccion").value;
-  var trimestre= document.getElementById("rpTrimestre").value;
-  var el       = document.getElementById("rpAsistResult");
-  el.innerHTML = "<p style=\"color:var(--text-light);font-size:13px\">Cargando...</p>";
+function generarPlanillaAsistencia() {
+  var grado   = document.getElementById("rpGrado").value;
+  var seccion = document.getElementById("rpSeccion").value;
+  var desde   = document.getElementById("rpDesde").value;
+  var hasta   = document.getElementById("rpHasta").value;
+  var el      = document.getElementById("rpAsistResult");
 
-  callBackend("getReporteAsistencia", {
-    grado: grado, seccion: seccion, trimestre: trimestre, ciclo_lectivo: APP.cicloLectivo
-  }, function(res) {
-    if (!res.ok || !res.data || res.data.length === 0) {
-      el.innerHTML = "<div class=\"alert alert-info\">Sin datos para los filtros seleccionados.</div>";
+  if (!grado || !seccion) { toast("Seleccioná grado y sección"); return; }
+  if (!desde || !hasta)   { toast("Completá el rango de fechas"); return; }
+  if (hasta < desde)      { toast("La fecha hasta debe ser mayor"); return; }
+
+  el.innerHTML = "<p style='color:var(--text-light);font-size:13px'>Cargando...</p>";
+
+  // Pedir alumnos y asistencia en paralelo
+  var alumnos = null, asistencia = null;
+
+  function intentarRender() {
+    if (!alumnos || !asistencia) return;
+
+    if (alumnos.length === 0) {
+      el.innerHTML = "<div class='alert alert-info'>Sin alumnos para ese curso.</div>";
       return;
     }
-    var trimLabel = TRIMESTRES[(parseInt(trimestre)||1)-1].label;
-    var enRiesgo  = res.data.filter(function(a){ return a.ausentes >= UMBRAL_RIESGO; });
-    var html = "";
 
-    if (enRiesgo.length > 0) {
-      html += "<div class=\"alert alert-warning\" style=\"margin-bottom:12px\">" +
-        "<strong>⚠️ Alumnos que podrían pasar a período de intensificación ("+trimLabel+"):</strong><br>" +
-        enRiesgo.map(function(a){
-          return "• <strong>"+a.apellido_nombre+"</strong> — "+a.grado+"°"+a.seccion+" — "+a.ausentes+" inasistencias";
-        }).join("<br>") +
-      "</div>";
+    // Construir lista de días únicos con asistencia en el rango, ordenados
+    var diasSet = {};
+    asistencia.forEach(function(r) {
+      if (r.fecha >= desde && r.fecha <= hasta) diasSet[r.fecha] = true;
+    });
+    var dias = Object.keys(diasSet).sort();
+
+    if (dias.length === 0) {
+      el.innerHTML = "<div class='alert alert-info'>No hay asistencia cargada en ese período.</div>";
+      return;
     }
 
-    html += "<div class=\"table-container\"><table class=\"data-table\">" +
-      "<thead><tr>" +
-        "<th>Alumno/a</th><th>Grado</th>" +
-        "<th style=\"text-align:center\">Presentes</th>" +
-        "<th style=\"text-align:center;color:var(--danger)\">Ausentes</th>" +
-        "<th style=\"text-align:center;color:var(--warning)\">Tardes</th>" +
-        "<th style=\"text-align:center\">% Asistencia</th>" +
-        "<th>Estado</th>" +
-      "</tr></thead><tbody>";
+    // Indexar asistencia por alumno+fecha
+    var idx = {};
+    asistencia.forEach(function(r) {
+      idx[r.id_alumno + "_" + r.fecha] = r.estado || "P";
+    });
 
-    res.data.forEach(function(a) {
-      var riesgo = a.ausentes >= UMBRAL_RIESGO;
-      var pct    = a.porcentaje || 0;
-      html += "<tr style=\"" + (riesgo?"background:rgba(220,53,69,.04)":"") + "\">" +
-        "<td><strong>"+a.apellido_nombre+"</strong></td>" +
-        "<td style=\"text-align:center\">"+a.grado+"°"+a.seccion+"</td>" +
-        "<td style=\"text-align:center\">"+a.presentes+"</td>" +
-        "<td style=\"text-align:center;font-weight:600;color:var(--danger)\">"+a.ausentes+"</td>" +
-        "<td style=\"text-align:center;color:var(--warning)\">"+a.tardes+"</td>" +
-        "<td><span style=\"font-weight:600;color:"+(riesgo?"var(--danger)":pct>=85?"var(--success)":"var(--warning)")+"\">"+pct+"%</span></td>" +
-        "<td>"+(riesgo
-          ? "<span class=\"badge badge-A\">⚠ Intensificación</span>"
-          : "<span class=\"badge badge-P\">✓ Regular</span>"
-        )+"</td>" +
+    // Días abreviados para el header
+    var diasSem = ["Do","Lu","Ma","Mi","Ju","Vi","Sá"];
+    var mesesAbr = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+    // Construir tabla
+    var html = "<div style='overflow-x:auto'><table style='border-collapse:collapse;font-size:12px;min-width:100%'>";
+
+    // Header — fechas
+    html += "<thead><tr>" +
+      "<th style='position:sticky;left:0;background:#B71C1C;color:#fff;padding:6px 10px;text-align:left;min-width:180px;z-index:2'>Alumno/a</th>";
+    dias.forEach(function(f) {
+      var d = new Date(f+"T12:00:00");
+      var ds = diasSem[d.getDay()];
+      var dd = d.getDate();
+      var mm = mesesAbr[d.getMonth()];
+      html += "<th style='background:#B71C1C;color:#fff;padding:4px 6px;text-align:center;min-width:38px;font-weight:600'>" +
+        "<div style='font-size:10px;font-weight:400'>"+ds+"</div>" +
+        "<div>"+dd+"</div>" +
+        "<div style='font-size:9px;font-weight:400'>"+mm+"</div>" +
+      "</th>";
+    });
+    html += "<th style='background:#7F0000;color:#fff;padding:6px 8px;text-align:center;min-width:50px'>Total<br>Inasist.</th>";
+    html += "</tr></thead><tbody>";
+
+    // Filas — alumnos
+    alumnos.sort(function(a,b){ return (a.apellido||"").localeCompare(b.apellido||""); });
+    alumnos.forEach(function(al, idx2) {
+      var totalAus = 0;
+      var celdas = "";
+      dias.forEach(function(f) {
+        var estado = idx[al.id_alumno+"_"+f];
+        var bg = "", txt = "", title = "";
+        if (!estado || estado === "P") {
+          bg = "#e8f5e9"; txt = "●"; title = "Presente";
+          // color verde pero sin texto para no saturar
+          celdas += "<td style='background:"+bg+";text-align:center;padding:3px 2px;border-bottom:1px solid #f0f0f0'>" +
+            "<span style='color:#2E7D32;font-size:14px' title='"+title+"'>●</span></td>";
+        } else if (estado === "A") {
+          totalAus++;
+          celdas += "<td style='background:#ffebee;text-align:center;padding:3px 2px;border-bottom:1px solid #f0f0f0'>" +
+            "<span style='color:#C62828;font-size:14px' title='Ausente'>●</span></td>";
+        } else if (estado === "T") {
+          totalAus += 0.5;
+          celdas += "<td style='background:#fff8e1;text-align:center;padding:3px 2px;border-bottom:1px solid #f0f0f0'>" +
+            "<span style='color:#F57F17;font-size:14px' title='Tarde'>●</span></td>";
+        } else {
+          celdas += "<td style='text-align:center;padding:3px 2px;border-bottom:1px solid #f0f0f0;color:#ccc'>—</td>";
+        }
+      });
+
+      var rowBg = idx2 % 2 === 0 ? "#fff" : "#fafafa";
+      var riesgo = totalAus >= UMBRAL_RIESGO;
+      html += "<tr style='background:"+rowBg+"'>" +
+        "<td style='position:sticky;left:0;background:"+(riesgo?"#fff5f5":rowBg)+";padding:5px 10px;border-bottom:1px solid #f0f0f0;font-weight:"+(riesgo?"600":"400")+";z-index:1'>" +
+          (al.apellido||"") + ", " + (al.nombre||"") +
+          (riesgo ? " <span style='color:#C62828;font-size:10px'>⚠</span>" : "") +
+        "</td>" +
+        celdas +
+        "<td style='text-align:center;font-weight:700;color:"+(totalAus>=UMBRAL_RIESGO?"#C62828":totalAus>0?"#F57F17":"#2E7D32")+";background:"+(riesgo?"#fff5f5":rowBg)+";border-bottom:1px solid #f0f0f0'>" +
+          (totalAus % 1 === 0 ? totalAus : totalAus.toFixed(1)) +
+        "</td>" +
       "</tr>";
     });
+
     html += "</tbody></table></div>";
-    html += "<button class=\"btn btn-outline\" style=\"margin-top:8px\" onclick=\"imprimirReporteAsistencia()\">🖨️ Imprimir / Guardar PDF</button>";
+
+    // Leyenda
+    html += "<div style='display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--text-light)'>" +
+      "<span><span style='color:#2E7D32'>●</span> Presente</span>" +
+      "<span><span style='color:#C62828'>●</span> Ausente</span>" +
+      "<span><span style='color:#F57F17'>●</span> Tarde (½)</span>" +
+      "<span>⚠ Riesgo (≥"+UMBRAL_RIESGO+" inasistencias)</span>" +
+    "</div>";
+
+    html += "<button class='btn btn-outline' style='margin-top:12px' onclick='imprimirPlanillaAsistencia()'>🖨️ Imprimir / Guardar PDF</button>";
+
     el.innerHTML = html;
 
-    // Guardar datos para el PDF
-    window._lastReporteAsist = { data: res.data, trimLabel: trimLabel, grado: grado, seccion: seccion, enRiesgo: enRiesgo };
+    // Guardar datos para imprimir
+    window._lastPlanillaAsist = {
+      alumnos: alumnos, dias: dias, idx: idx,
+      grado: grado, seccion: seccion, desde: desde, hasta: hasta
+    };
+  }
+
+  callBackend("getAlumnos", {grado: grado, seccion: seccion, ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    alumnos = res.ok ? res.data : [];
+    intentarRender();
+  });
+
+  callBackend("getAsistencia", {grado: grado, seccion: seccion, ciclo_lectivo: APP.cicloLectivo, desde: desde, hasta: hasta}, function(res) {
+    asistencia = res.ok ? res.data : [];
+    intentarRender();
   });
 }
 
-function imprimirReporteAsistencia() {
-  var r = window._lastReporteAsist;
+function imprimirPlanillaAsistencia() {
+  var r = window._lastPlanillaAsist;
   if (!r) return;
-  var filtroStr = (r.grado ? r.grado+"°" : "Todos los grados") + (r.seccion ? " — Sección "+r.seccion : " — Todas las secciones") + " — " + r.trimLabel;
-  var subtitulo = "Reporte de Asistencia de Alumnos &nbsp;|&nbsp; " + filtroStr;
-  var html = _cabeceraReporte("Reporte de Asistencia", subtitulo);
 
-  // Resumen
-  var totalAlumnos = r.data.length;
-  var totalRiesgo  = r.enRiesgo.length;
-  var promPct = totalAlumnos > 0 ? Math.round(r.data.reduce(function(s,a){return s+(a.porcentaje||0)},0)/totalAlumnos) : 0;
-  html += "<div class='resumen'>" +
-    "<span>Total alumnos: <b>"+totalAlumnos+"</b></span>" +
-    "<span>En riesgo (≥"+UMBRAL_RIESGO+" inasistencias): <b>"+totalRiesgo+"</b></span>" +
-    "<span>Asistencia promedio: <b>"+promPct+"%</b></span>" +
-  "</div>";
+  var subtitulo = r.grado + "° " + r.seccion + " &nbsp;|&nbsp; " + r.desde + " al " + r.hasta;
+  var html = _cabeceraReporte("Planilla de Asistencia", subtitulo);
 
-  if (r.enRiesgo.length > 0) {
-    html += "<div class='alerta-box'>⚠️ <strong>Alumnos con posible período de intensificación:</strong> " +
-      r.enRiesgo.map(function(a){ return a.apellido_nombre+" ("+a.ausentes+" aus.)"; }).join(" &nbsp;·&nbsp; ") +
-    "</div>";
-  }
+  var diasSem  = ["Do","Lu","Ma","Mi","Ju","Vi","Sá"];
+  var mesesAbr = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
-  html += "<table><thead><tr>" +
-    "<th>Alumno/a</th><th>Grado</th><th style='text-align:center'>Presentes</th>" +
-    "<th style='text-align:center'>Ausentes</th><th style='text-align:center'>Tardes</th>" +
-    "<th style='text-align:center'>% Asist.</th><th>Estado</th>" +
-  "</tr></thead><tbody>";
-  r.data.forEach(function(a) {
-    var riesgo = a.ausentes >= UMBRAL_RIESGO;
-    var pct = a.porcentaje || 0;
-    html += "<tr"+(riesgo?" class='riesgo'":"")+"><td><strong>"+a.apellido_nombre+"</strong></td>" +
-      "<td style='text-align:center'>"+a.grado+"°"+a.seccion+"</td>" +
-      "<td style='text-align:center'>"+a.presentes+"</td>" +
-      "<td style='text-align:center;font-weight:600;color:#C62828'>"+a.ausentes+"</td>" +
-      "<td style='text-align:center;color:#F57F17'>"+a.tardes+"</td>" +
-      "<td style='text-align:center;font-weight:600'>"+pct+"%</td>" +
-      "<td>"+(riesgo?"<span class='badge-risk'>⚠ Intensificación</span>":"<span class='badge-ok'>✓ Regular</span>")+"</td></tr>";
+  html += "<table style='width:100%;border-collapse:collapse;font-size:10px'><thead><tr>" +
+    "<th style='background:#B71C1C;color:#fff;padding:5px 8px;text-align:left;min-width:140px'>Alumno/a</th>";
+
+  r.dias.forEach(function(f) {
+    var d  = new Date(f+"T12:00:00");
+    html += "<th style='background:#B71C1C;color:#fff;padding:3px 4px;text-align:center;min-width:28px;font-size:9px'>" +
+      diasSem[d.getDay()]+"<br>"+d.getDate()+"<br>"+mesesAbr[d.getMonth()]+"</th>";
   });
+  html += "<th style='background:#7F0000;color:#fff;padding:5px 4px;text-align:center'>Total</th></tr></thead><tbody>";
+
+  r.alumnos.forEach(function(al, i) {
+    var totalAus = 0;
+    var celdas = "";
+    r.dias.forEach(function(f) {
+      var estado = r.idx[al.id_alumno+"_"+f];
+      if (!estado || estado === "P") {
+        celdas += "<td style='background:#e8f5e9;text-align:center;border:1px solid #ddd;padding:2px;color:#2E7D32;font-weight:700'>P</td>";
+      } else if (estado === "A") {
+        totalAus++;
+        celdas += "<td style='background:#ffebee;text-align:center;border:1px solid #ddd;padding:2px;color:#C62828;font-weight:700'>A</td>";
+      } else if (estado === "T") {
+        totalAus += 0.5;
+        celdas += "<td style='background:#fff8e1;text-align:center;border:1px solid #ddd;padding:2px;color:#F57F17;font-weight:700'>T</td>";
+      } else {
+        celdas += "<td style='text-align:center;border:1px solid #ddd;padding:2px;color:#ccc'>—</td>";
+      }
+    });
+    var riesgo = totalAus >= UMBRAL_RIESGO;
+    var rowBg  = i % 2 === 0 ? "#fff" : "#fafafa";
+    html += "<tr style='background:"+(riesgo?"#fff5f5":rowBg)+"'>" +
+      "<td style='padding:4px 8px;border:1px solid #ddd;font-weight:"+(riesgo?"600":"400")+"'>" +
+        (al.apellido||"")+", "+(al.nombre||"")+(riesgo?" ⚠":"") +
+      "</td>" + celdas +
+      "<td style='text-align:center;font-weight:700;border:1px solid #ddd;color:"+(totalAus>=UMBRAL_RIESGO?"#C62828":totalAus>0?"#F57F17":"#2E7D32")+"'>" +
+        (totalAus%1===0?totalAus:totalAus.toFixed(1)) +
+      "</td></tr>";
+  });
+
   html += "</tbody></table>";
-  html += "<div class='pie'>PM Digital &nbsp;·&nbsp; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;·&nbsp; Ciclo " + APP.cicloLectivo + "</div>";
-  html += _bloquesFirmaHTML();
+  html += "<div style='margin-top:8px;font-size:10px;color:#555'>P = Presente &nbsp;·&nbsp; A = Ausente &nbsp;·&nbsp; T = Tarde (½) &nbsp;·&nbsp; ⚠ Riesgo ≥"+UMBRAL_RIESGO+" inasistencias</div>";
+
+  // Firma Directora
+  var nombreDir = APP.directivoNombre || (APP.config && APP.config.DIRECTIVO_NOMBRE) || "";
+  var imgHtml   = APP.firmaBase64
+    ? "<img src='"+APP.firmaBase64+"' style='max-height:50px;max-width:160px;display:block;margin:0 auto 4px'>"
+    : "<div style='height:50px'></div>";
+  html += "<div style='margin-top:32px;display:flex;justify-content:flex-end'>" +
+    "<div style='text-align:center;min-width:180px'>" +
+      imgHtml +
+      "<div style='border-top:1px solid #000;padding-top:4px;font-size:11px'>"+nombreDir+"<br><strong>Directora</strong></div>" +
+    "</div></div>";
+
   html += "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>";
   html += "</body></html>";
   var win = window.open("","_blank"); win.document.write(html); win.document.close();
 }
+
+function generarReporteAsistencia() { generarPlanillaAsistencia(); }
 
 function generarReporteDocentes() {
   var desde = document.getElementById("rpDocDesde").value;
@@ -2399,30 +2498,64 @@ function imprimirReporteDocentes() {
   var subtitulo = "Ausencias Docentes &nbsp;|&nbsp; Del " + r.desde + " al " + r.hasta;
   var html = _cabeceraReporte("Reporte de Ausencias Docentes", subtitulo);
 
+  // Calcular total de días
+  var totalDias = 0;
+  r.data.forEach(function(a) {
+    var d1 = new Date((a.fecha||"")+"T12:00:00");
+    var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+    totalDias += Math.round((d2-d1)/(1000*60*60*24))+1;
+  });
+
   html += "<div class='resumen'>" +
-    "<span>Total de ausencias: <b>"+r.data.length+"</b></span>" +
-    "<span>Docentes involucrados: <b>"+Object.keys(r.porDocente).length+"</b></span>" +
+    "<span>Registros: <b>"+r.data.length+"</b></span>" +
+    "<span>Total días: <b>"+totalDias+"</b></span>" +
+    "<span>Docentes: <b>"+Object.keys(r.porDocente).length+"</b></span>" +
   "</div>";
 
   html += "<table><thead><tr>" +
-    "<th>Docente</th><th style='text-align:center'>Total ausencias</th><th>Motivos</th><th>Fechas</th>" +
+    "<th>Docente</th><th style='text-align:center'>Días</th><th>Motivo</th><th>Reemplazante</th><th style='text-align:center'>Movimiento</th>" +
   "</tr></thead><tbody>";
 
   Object.keys(r.porDocente).sort().forEach(function(doc) {
     var ausencias = r.porDocente[doc];
     var motivos = {};
-    ausencias.forEach(function(a){ motivos[a.motivo] = (motivos[a.motivo]||0)+1; });
+    var dias = 0;
+    var reemplazantes = {};
+    var movSi = false;
+    ausencias.forEach(function(a) {
+      motivos[a.motivo] = (motivos[a.motivo]||0)+1;
+      var d1 = new Date((a.fecha||"")+"T12:00:00");
+      var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+      dias += Math.round((d2-d1)/(1000*60*60*24))+1;
+      if (a.reemplazante) reemplazantes[a.reemplazante] = true;
+      if (a.movimiento === "Sí") movSi = true;
+    });
     var motivoStr = Object.keys(motivos).map(function(m){ return m+" ("+motivos[m]+")"; }).join(", ");
-    var fechasStr = ausencias.map(function(a){ return a.fecha; }).join(", ");
+    var reemplStr = Object.keys(reemplazantes).join(", ") || "—";
     html += "<tr><td><strong>"+doc+"</strong></td>" +
-      "<td style='text-align:center;font-weight:600;color:#C62828'>"+ausencias.length+"</td>" +
+      "<td style='text-align:center;font-weight:600;color:#C62828'>"+dias+"</td>" +
       "<td>"+motivoStr+"</td>" +
-      "<td style='font-size:11px;color:#555'>"+fechasStr+"</td></tr>";
+      "<td>"+reemplStr+"</td>" +
+      "<td style='text-align:center;font-weight:600;color:"+(movSi?"#2E7D32":"#999")+"'>"+(movSi?"Sí":"No")+"</td></tr>";
   });
 
   html += "</tbody></table>";
-  html += "<div class'pie'>PM Digital &nbsp;;&nbsp;; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;;&nbsp;; Ciclo " + APP.cicloLectivo + "</div>";
-  html += _bloquesFirmaHTML();
+
+  // Firma con "Directora" fijo
+  var nombreDir = APP.directivoNombre || (APP.config && APP.config.DIRECTIVO_NOMBRE) || "";
+  var imgHtml = APP.firmaBase64
+    ? "<img src='"+APP.firmaBase64+"' style='max-height:50px;max-width:160px;display:block;margin:0 auto 4px'>"
+    : "<div style='height:50px'></div>";
+  html += "<div style='margin-top:32px;display:flex;justify-content:flex-end'>" +
+    "<div style='text-align:center;min-width:180px'>" +
+      imgHtml +
+      "<div style='border-top:1px solid #000;padding-top:4px;font-size:11px'>" +
+        nombreDir + "<br><strong>Directora</strong>" +
+      "</div>" +
+    "</div>" +
+  "</div>";
+
+  html += "<div class='pie'>PM Digital &nbsp;·&nbsp; " + (APP.config.NOMBRE_ESCUELA||"") + " &nbsp;·&nbsp; Ciclo " + APP.cicloLectivo + "</div>";
   html += "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>";
   html += "</body></html>";
   var win = window.open("","_blank"); win.document.write(html); win.document.close();
@@ -2833,12 +2966,13 @@ function renderListaAusencias(data) {
     return;
   }
   var html = '<div class="table-container"><table class="data-table"><thead><tr>' +
-    '<th>Docente</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Motivo</th><th>Reemplazante</th>' +
+    '<th>Docente</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Motivo</th><th>Reemplazante</th><th style="text-align:center">Movimiento</th>' +
     '</tr></thead><tbody>';
   data.forEach(function(a) {
     var d1 = new Date((a.fecha||"")+"T12:00:00");
     var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
     var dias = Math.round((d2-d1)/(1000*60*60*24))+1;
+    var mov = a.movimiento || "No";
     html += '<tr>' +
       '<td><strong>'+a.docente_nombre+'</strong></td>' +
       '<td>'+a.fecha+'</td>' +
@@ -2846,6 +2980,9 @@ function renderListaAusencias(data) {
       '<td style="text-align:center;font-weight:600;color:'+(dias>1?"var(--danger)":"inherit")+'">'+dias+'</td>' +
       '<td style="font-size:12px">'+a.motivo+'</td>' +
       '<td style="font-size:12px;color:var(--text-light)">'+(a.reemplazante||'—')+'</td>' +
+      '<td style="text-align:center">' +
+        '<span style="font-weight:600;color:'+(mov==="Sí"?"#2E7D32":"var(--text-light)")+'">'+mov+'</span>' +
+      '</td>' +
     '</tr>';
   });
   html += '</tbody></table></div>';
@@ -2916,7 +3053,18 @@ function abrirModalAusenciaDocente() {
       '<label class="form-label">Especificá el motivo *</label>' +
       '<input id="adOtraTexto" class="form-control" placeholder="Describí el motivo...">' +
     '</div>' +
-    '<div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>',
+    '<div class="form-group"><label class="form-label">Reemplazante (opcional)</label><input id="adReemplazante" class="form-control"></div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">¿Va por movimientos?</label>' +
+      '<div style="display:flex;gap:16px;margin-top:6px">' +
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">' +
+          '<input type="radio" name="adMovimiento" value="Sí" style="width:16px;height:16px;accent-color:#B71C1C"> Sí' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">' +
+          '<input type="radio" name="adMovimiento" value="No" checked style="width:16px;height:16px;accent-color:#B71C1C"> No' +
+        '</label>' +
+      '</div>' +
+    '</div>',
     [{label:"💾 Registrar", cls:"btn-primary", fn:"registrarAusenciaDocenteSubmit()"}]
   );
 }
@@ -2963,12 +3111,16 @@ function registrarAusenciaDocenteSubmit() {
   }
 
   // Si es un solo día, registrar una fila. Si es rango, registrar una fila con fecha_hasta
+  var movRadio = document.querySelector('input[name="adMovimiento"]:checked');
+  var movimiento = movRadio ? movRadio.value : "No";
+
   callBackend("registrarAusenciaDocente", {
     fecha:           desde,
     fecha_hasta:     hasta,
     docente_nombre:  nombre,
     motivo:          motivo,
-    reemplazante:    v("adReemplazante")
+    reemplazante:    v("adReemplazante"),
+    movimiento:      movimiento
   }, function(res) {
     if (res.ok) {
       cerrarModal();
