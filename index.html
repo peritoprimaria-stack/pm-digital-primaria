@@ -2485,7 +2485,10 @@ function generarReporteDocentes() {
       "</tr>";
     });
     html += "</tbody></table></div>";
-    html += "<button class=\"btn btn-outline\" style=\"margin-top:8px\" onclick=\"imprimirReporteDocentes()\">🖨️ Imprimir / Guardar PDF</button>";
+    html += "<div style='display:flex;gap:8px;margin-top:8px'>" +
+      "<button class=\"btn btn-outline\" onclick=\"imprimirReporteDocentes()\">🖨️ Imprimir / Guardar PDF</button>" +
+      "<button class=\"btn btn-outline\" style=\"color:#1D6F42;border-color:#1D6F42\" onclick=\"exportarReporteDocentesExcel()\">📊 Exportar Excel</button>" +
+    "</div>";
     el.innerHTML = html;
 
     window._lastReporteDoc = { data: res.data, desde: desde, hasta: hasta, porDocente: porDocente };
@@ -2561,7 +2564,92 @@ function imprimirReporteDocentes() {
   var win = window.open("","_blank"); win.document.write(html); win.document.close();
 }
 
-function generarReporteAccidentes() {
+function exportarReporteDocentesExcel() {
+  var r = window._lastReporteDoc;
+  if (!r) return;
+
+  // Cargar SheetJS dinámicamente si no está
+  function _doExport() {
+    var XLSX = window.XLSX;
+    var esc  = (APP.config && APP.config.NOMBRE_ESCUELA) || "Escuela";
+
+    // ── Hoja 1: Detalle completo ──────────────────────────────
+    var detalle = [
+      [esc],
+      ["Reporte de Ausencias Docentes — Del " + r.desde + " al " + r.hasta],
+      [],
+      ["Docente","Fecha desde","Fecha hasta","Días","Motivo","Reemplazante","Movimiento"]
+    ];
+    r.data.forEach(function(a) {
+      var d1 = new Date((a.fecha||"")+"T12:00:00");
+      var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+      var dias = Math.round((d2-d1)/(1000*60*60*24))+1;
+      detalle.push([
+        a.docente_nombre,
+        a.fecha,
+        a.fecha_hasta || a.fecha,
+        dias,
+        a.motivo,
+        a.reemplazante || "",
+        a.movimiento   || "No"
+      ]);
+    });
+
+    // ── Hoja 2: Resumen por docente ───────────────────────────
+    var resumen = [
+      [esc],
+      ["Resumen por Docente — Del " + r.desde + " al " + r.hasta],
+      [],
+      ["Docente","Total días","Motivos","Reemplazante","Movimiento"]
+    ];
+    Object.keys(r.porDocente).sort().forEach(function(doc) {
+      var ausencias = r.porDocente[doc];
+      var motivos = {}, totalDias = 0, reemplazantes = {}, movSi = false;
+      ausencias.forEach(function(a) {
+        motivos[a.motivo] = (motivos[a.motivo]||0)+1;
+        var d1 = new Date((a.fecha||"")+"T12:00:00");
+        var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
+        totalDias += Math.round((d2-d1)/(1000*60*60*24))+1;
+        if (a.reemplazante) reemplazantes[a.reemplazante] = true;
+        if (a.movimiento === "Sí") movSi = true;
+      });
+      resumen.push([
+        doc,
+        totalDias,
+        Object.keys(motivos).map(function(m){ return m+" ("+motivos[m]+")"; }).join(", "),
+        Object.keys(reemplazantes).join(", ") || "—",
+        movSi ? "Sí" : "No"
+      ]);
+    });
+
+    // ── Crear workbook ────────────────────────────────────────
+    var wb = XLSX.utils.book_new();
+
+    var ws1 = XLSX.utils.aoa_to_sheet(detalle);
+    ws1["!cols"] = [{wch:30},{wch:12},{wch:12},{wch:6},{wch:30},{wch:20},{wch:12}];
+    // Estilo encabezado (SheetJS community no soporta estilos, pero sí anchos)
+    XLSX.utils.book_append_sheet(wb, ws1, "Detalle");
+
+    var ws2 = XLSX.utils.aoa_to_sheet(resumen);
+    ws2["!cols"] = [{wch:30},{wch:10},{wch:35},{wch:20},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws2, "Resumen");
+
+    // ── Descargar ─────────────────────────────────────────────
+    var nombre = "Ausencias_Docentes_"+r.desde+"_al_"+r.hasta+".xlsx";
+    XLSX.writeFile(wb, nombre);
+    toast("✅ Excel descargado");
+  }
+
+  if (window.XLSX) {
+    _doExport();
+  } else {
+    var s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = _doExport;
+    s.onerror = function(){ toast("❌ No se pudo cargar la librería Excel"); };
+    document.head.appendChild(s);
+  }
+}
   var desde = document.getElementById("rpAccidDesde").value;
   var hasta = document.getElementById("rpAccidHasta").value;
   var el    = document.getElementById("rpAccidResult");
