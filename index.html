@@ -282,6 +282,14 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px}
         <button class="hamburger" onclick="toggleSidebar()">☰</button>
         <h2 id="pageTitle">Dashboard</h2>
       </div>
+      <!-- Búsqueda global -->
+      <div style="position:relative;flex:1;max-width:280px;margin:0 16px">
+        <input id="globalSearch" class="form-control" placeholder="🔍 Buscar alumno..." autocomplete="off"
+          style="padding:6px 12px;font-size:13px;border-radius:20px"
+          oninput="busquedaGlobalInput(this.value)"
+          onblur="setTimeout(function(){var d=document.getElementById('globalSearchDrop');if(d)d.style.display='none'},200)">
+        <div id="globalSearchDrop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:280px;overflow-y:auto"></div>
+      </div>
       <div class="topbar-right">
         <span class="ciclo-badge" id="cicloBadge">2025</span>
         <span id="topbarUser" style="font-size:13px;color:var(--text-light)"></span>
@@ -573,6 +581,7 @@ function renderDashboard() {
     '</div>';
 
   pc.innerHTML = saludoHTML +
+    '<div id="dashAlertas"></div>' +
     '<div class="stat-grid" id="statsGrid"><div style="text-align:center;padding:20px;color:var(--text-light)">Cargando estadísticas...</div></div>' +
     '<div id="dashCharts" style="display:none">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">' +
@@ -581,6 +590,10 @@ function renderDashboard() {
       '</div>' +
     '</div>' +
     '<div id="dashAlerts"></div>';
+
+  // Cargar alertas del día y cache de alumnos para búsqueda
+  if (rol !== "maestro") cargarAlertasDashboard();
+  cargarCacheAlumnos();
 
   var rol = APP.usuario.rol;
 
@@ -1222,6 +1235,113 @@ function renderDashCharts(data) {
     ctx2.beginPath(); ctx2.moveTo(pad2.left, refY2); ctx2.lineTo(pad2.left+cw2, refY2); ctx2.stroke();
     ctx2.setLineDash([]);
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// BÚSQUEDA GLOBAL
+// ════════════════════════════════════════════════════════════
+var _cacheTodosAlumnos = null;
+
+function cargarCacheAlumnos() {
+  if (_cacheTodosAlumnos) return;
+  callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    if (res.ok) _cacheTodosAlumnos = res.data;
+  });
+}
+
+function busquedaGlobalInput(q) {
+  var drop = document.getElementById("globalSearchDrop");
+  if (!drop) return;
+  q = q.trim().toLowerCase();
+  if (q.length < 2) { drop.style.display = "none"; return; }
+
+  if (!_cacheTodosAlumnos) {
+    drop.innerHTML = "<div style='padding:12px;color:var(--text-light);font-size:13px'>Cargando...</div>";
+    drop.style.display = "block";
+    callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+      if (res.ok) { _cacheTodosAlumnos = res.data; busquedaGlobalInput(document.getElementById("globalSearch").value); }
+    });
+    return;
+  }
+
+  var resultados = _cacheTodosAlumnos.filter(function(a) {
+    return (a.apellido + " " + a.nombre).toLowerCase().indexOf(q) >= 0 ||
+           (a.nombre + " " + a.apellido).toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 8);
+
+  if (resultados.length === 0) {
+    drop.innerHTML = "<div style='padding:12px;color:var(--text-light);font-size:13px'>Sin resultados</div>";
+    drop.style.display = "block";
+    return;
+  }
+
+  drop.innerHTML = resultados.map(function(a) {
+    return "<div onclick='irAlumnoDesdeSearch(\""+a.id_alumno+"\")' style='padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center' onmouseover='this.style.background=\"#f5f5f5\"' onmouseout='this.style.background=\"#fff\"'>" +
+      "<div>" +
+        "<div style='font-weight:600;font-size:13px'>"+a.apellido+", "+a.nombre+"</div>" +
+        "<div style='font-size:11px;color:var(--text-light)'>"+a.grado+"° "+a.seccion+"</div>" +
+      "</div>" +
+      "<span style='font-size:11px;color:var(--text-light)'>→</span>" +
+    "</div>";
+  }).join("");
+  drop.style.display = "block";
+}
+
+function irAlumnoDesdeSearch(idAlumno) {
+  var drop = document.getElementById("globalSearchDrop");
+  var inp  = document.getElementById("globalSearch");
+  if (drop) drop.style.display = "none";
+  if (inp)  inp.value = "";
+  _cacheTodosAlumnos = null; // refrescar la próxima vez
+
+  // Ir al módulo alumnos y abrir el legajo
+  navegarA("alumnos");
+  setTimeout(function() {
+    verAlumno(idAlumno);
+  }, 400);
+}
+
+// ════════════════════════════════════════════════════════════
+// ALERTAS DASHBOARD
+// ════════════════════════════════════════════════════════════
+function cargarAlertasDashboard() {
+  var hoy = new Date().toISOString().split("T")[0];
+  var alertasHTML = "";
+  var pendientes  = 2;
+
+  function intentarMostrar() {
+    pendientes--;
+    if (pendientes > 0) return;
+    var el = document.getElementById("dashAlertas");
+    if (!el || !alertasHTML) return;
+    el.innerHTML = "<div class='card' style='border-left:4px solid #B71C1C;margin-bottom:16px'>" +
+      "<div class='card-title' style='color:#B71C1C;margin-bottom:8px'>🔔 Alertas del día</div>" +
+      alertasHTML +
+    "</div>";
+  }
+
+  // Alerta 1: docentes ausentes hoy
+  callBackend("getReporteAusenciasDocentes", {desde: hoy, hasta: hoy}, function(res) {
+    if (res.ok && res.data && res.data.length > 0) {
+      alertasHTML += "<div style='margin-bottom:8px;font-size:13px'>" +
+        "👨‍🏫 <strong>Docentes ausentes hoy:</strong> " +
+        res.data.map(function(a){ return a.docente_nombre; }).join(", ") +
+      "</div>";
+    }
+    intentarMostrar();
+  });
+
+  // Alerta 2: alumnos en riesgo de inasistencias
+  callBackend("getAlertasAsistencia", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    if (res.ok && res.data && res.data.length > 0) {
+      alertasHTML += "<div style='font-size:13px'>" +
+        "⚠️ <strong>Alumnos en riesgo de inasistencias:</strong> " +
+        res.data.length + " alumno" + (res.data.length > 1 ? "s" : "") +
+        " <a href='#' onclick='navegarA(\"reportes\");return false' style='color:#B71C1C;font-size:12px'>Ver detalle →</a>" +
+      "</div>";
+    }
+    intentarMostrar();
+  });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2391,15 +2511,33 @@ function imprimirPlanillaAsistencia() {
   var diasSem  = ["Do","Lu","Ma","Mi","Ju","Vi","Sá"];
   var mesesAbr = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
+  // Estilos específicos para impresión B&N
+  html = html.replace("</style>", [
+    "@media print{",
+    "  body{font-size:10px}",
+    "  table{page-break-inside:auto}",
+    "  tr{page-break-inside:avoid}",
+    "  .cel-p{background:#fff!important;color:#000!important;border:1px solid #000!important;font-weight:400!important}",
+    "  .cel-a{background:#fff!important;color:#000!important;border:2px solid #000!important;font-weight:900!important;font-size:13px!important}",
+    "  .cel-t{background:#fff!important;color:#000!important;border:1px solid #000!important;font-style:italic!important;font-weight:700!important}",
+    "  .cel-v{background:#fff!important;color:#ccc!important;border:1px solid #ddd!important}",
+    "}",
+    ".cel-p{background:#e8f5e9;text-align:center;border:1px solid #ccc;padding:3px;font-weight:700;color:#2E7D32}",
+    ".cel-a{background:#ffebee;text-align:center;border:1px solid #ccc;padding:3px;font-weight:700;color:#C62828}",
+    ".cel-t{background:#fff8e1;text-align:center;border:1px solid #ccc;padding:3px;font-weight:700;color:#F57F17}",
+    ".cel-v{text-align:center;border:1px solid #eee;padding:3px;color:#ccc}",
+    "</style>"
+  ].join("\n"));
+
   html += "<table style='width:100%;border-collapse:collapse;font-size:10px'><thead><tr>" +
-    "<th style='background:#B71C1C;color:#fff;padding:5px 8px;text-align:left;min-width:140px'>Alumno/a</th>";
+    "<th style='background:#B71C1C;color:#fff;padding:5px 8px;text-align:left;min-width:140px;border:1px solid #999'>Alumno/a</th>";
 
   r.dias.forEach(function(f) {
-    var d  = new Date(f+"T12:00:00");
-    html += "<th style='background:#B71C1C;color:#fff;padding:3px 4px;text-align:center;min-width:28px;font-size:9px'>" +
+    var d = new Date(f+"T12:00:00");
+    html += "<th style='background:#B71C1C;color:#fff;padding:3px 4px;text-align:center;min-width:28px;font-size:9px;border:1px solid #999'>" +
       diasSem[d.getDay()]+"<br>"+d.getDate()+"<br>"+mesesAbr[d.getMonth()]+"</th>";
   });
-  html += "<th style='background:#7F0000;color:#fff;padding:5px 4px;text-align:center'>Total</th></tr></thead><tbody>";
+  html += "<th style='background:#7F0000;color:#fff;padding:5px 4px;text-align:center;border:1px solid #999'>Tot.</th></tr></thead><tbody>";
 
   r.alumnos.forEach(function(al, i) {
     var totalAus = 0;
@@ -2407,32 +2545,36 @@ function imprimirPlanillaAsistencia() {
     r.dias.forEach(function(f) {
       var estado = r.idx[al.id_alumno+"_"+f];
       if (!estado || estado === "P") {
-        celdas += "<td style='background:#e8f5e9;text-align:center;border:1px solid #ddd;padding:2px;color:#2E7D32;font-weight:700'>P</td>";
+        celdas += "<td class='cel-p'>P</td>";
       } else if (estado === "A") {
         totalAus++;
-        celdas += "<td style='background:#ffebee;text-align:center;border:1px solid #ddd;padding:2px;color:#C62828;font-weight:700'>A</td>";
+        celdas += "<td class='cel-a'>A</td>";
       } else if (estado === "T") {
         totalAus += 0.5;
-        celdas += "<td style='background:#fff8e1;text-align:center;border:1px solid #ddd;padding:2px;color:#F57F17;font-weight:700'>T</td>";
+        celdas += "<td class='cel-t'>T</td>";
       } else {
-        celdas += "<td style='text-align:center;border:1px solid #ddd;padding:2px;color:#ccc'>—</td>";
+        celdas += "<td class='cel-v'>—</td>";
       }
     });
     var riesgo = totalAus >= UMBRAL_RIESGO;
-    var rowBg  = i % 2 === 0 ? "#fff" : "#fafafa";
+    var rowBg  = i % 2 === 0 ? "#fff" : "#f9f9f9";
     html += "<tr style='background:"+(riesgo?"#fff5f5":rowBg)+"'>" +
-      "<td style='padding:4px 8px;border:1px solid #ddd;font-weight:"+(riesgo?"600":"400")+"'>" +
+      "<td style='padding:4px 8px;border:1px solid #ccc;font-weight:"+(riesgo?"700":"400")+"'>" +
         (al.apellido||"")+", "+(al.nombre||"")+(riesgo?" ⚠":"") +
       "</td>" + celdas +
-      "<td style='text-align:center;font-weight:700;border:1px solid #ddd;color:"+(totalAus>=UMBRAL_RIESGO?"#C62828":totalAus>0?"#F57F17":"#2E7D32")+"'>" +
+      "<td style='text-align:center;font-weight:700;border:1px solid #ccc;background:"+(riesgo?"#ffebee":rowBg)+"'>" +
         (totalAus%1===0?totalAus:totalAus.toFixed(1)) +
       "</td></tr>";
   });
 
   html += "</tbody></table>";
-  html += "<div style='margin-top:8px;font-size:10px;color:#555'>P = Presente &nbsp;·&nbsp; A = Ausente &nbsp;·&nbsp; T = Tarde (½) &nbsp;·&nbsp; ⚠ Riesgo ≥"+UMBRAL_RIESGO+" inasistencias</div>";
+  html += "<div style='margin-top:8px;font-size:10px;color:#555;display:flex;gap:16px;flex-wrap:wrap'>" +
+    "<span style='display:flex;align-items:center;gap:4px'><span style='display:inline-block;width:14px;height:14px;background:#e8f5e9;border:1px solid #ccc'></span> P = Presente</span>" +
+    "<span style='display:flex;align-items:center;gap:4px'><span style='display:inline-block;width:14px;height:14px;background:#000;border:1px solid #ccc'></span> A = Ausente</span>" +
+    "<span style='display:flex;align-items:center;gap:4px'><span style='display:inline-block;width:14px;height:14px;background:#888;border:1px solid #ccc'></span> T = Tarde (½)</span>" +
+    "<span>⚠ Riesgo ≥"+UMBRAL_RIESGO+" inasistencias</span>" +
+  "</div>";
 
-  // Firma Directora
   var nombreDir = APP.directivoNombre || (APP.config && APP.config.DIRECTIVO_NOMBRE) || "";
   var imgHtml   = APP.firmaBase64
     ? "<img src='"+APP.firmaBase64+"' style='max-height:50px;max-width:160px;display:block;margin:0 auto 4px'>"
