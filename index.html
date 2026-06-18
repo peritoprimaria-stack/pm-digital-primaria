@@ -1963,13 +1963,23 @@ function verLegajo(id) {
       var histHtml = resH.ok && resH.data.length > 0
         ? resH.data.map(function(h) {
             return '<div style="border-left:3px solid var(--primary);padding:8px 12px;margin-bottom:8px;background:#f9f9f9;border-radius:0 6px 6px 0">'
-              +'<div style="font-size:12px;color:var(--text-light)">'+h.fecha+' · '+h.tipo_intervencion+' · '+h.profesional+'</div>'
+              +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+                +'<div style="font-size:12px;color:var(--text-light)">'+h.fecha+' · '+h.tipo_intervencion+' · '+h.profesional+'</div>'
+                +'<div style="display:flex;gap:4px;flex-shrink:0">'
+                  +'<button onclick=\'editarEntradaHistorial("'+h.id_entrada+'","'+id+'","'+l.id_alumno+'")\' style="border:none;background:none;cursor:pointer;font-size:13px" title="Editar">✏️</button>'
+                  +'<button onclick=\'confirmarEliminarHistorial("'+h.id_entrada+'","'+id+'","'+l.id_alumno+'")\' style="border:none;background:none;cursor:pointer;font-size:13px" title="Eliminar">🗑️</button>'
+                +'</div>'
+              +'</div>'
               +'<div style="font-size:13px;margin-top:4px">'+h.descripcion+'</div></div>';
           }).join("")
         : '<p style="color:var(--text-light);font-size:13px">Sin entradas en el historial.</p>';
 
       abrirModal("📂 Legajo — " + l.apellido_nombre,
-        `<div class="form-grid" style="margin-bottom:12px">
+        `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='abrirModalEditarLegajo(${JSON.stringify(l).replace(/'/g,"&apos;")})'>✏️ Editar legajo</button>
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick='confirmarEliminarLegajo("${id}")'>🗑️ Eliminar legajo</button>
+        </div>
+        <div class="form-grid" style="margin-bottom:12px">
           <div><b>Grado:</b> ${l.grado}° ${l.seccion}</div>
           <div><b>Estado:</b> <span class="estado-badge estado-${l.estado}">${l.estado}</span></div>
           <div><b>Apertura:</b> ${l.fecha_apertura}</div>
@@ -1993,6 +2003,104 @@ function verLegajo(id) {
         [{label:"💾 Agregar entrada", cls:"btn-primary", fn:'agregarEntradaHistorial("'+id+'","'+l.id_alumno+'")'}]
       );
     });
+  });
+}
+
+function abrirModalEditarLegajo(l) {
+  abrirModal("✏️ Editar Legajo — " + l.apellido_nombre,
+    '<div class="form-group"><label class="form-label">Motivo</label>' +
+      '<input id="elMotivo" class="form-control" value="'+(l.motivo||'').replace(/"/g,'&quot;')+'"></div>' +
+    '<div class="form-group"><label class="form-label">Tipo</label>' +
+      '<select id="elTipo" class="form-control">' +
+        ['Pedagógico','Psicológico','Social','Fonoaudiológico','Psicopedagógico','Otro'].map(function(t){
+          return '<option'+(t===l.tipo?' selected':'')+'>'+t+'</option>';
+        }).join('') +
+      '</select></div>' +
+    '<div class="form-group"><label class="form-label">Profesional a cargo</label>' +
+      '<input id="elProfesional" class="form-control" value="'+(l.profesional_a_cargo||'').replace(/"/g,'&quot;')+'"></div>' +
+    '<div class="form-group"><label class="form-label">Estado</label>' +
+      '<select id="elEstado" class="form-control">' +
+        ['Activo','En seguimiento','Cerrado'].map(function(e){
+          return '<option'+(e===l.estado?' selected':'')+'>'+e+'</option>';
+        }).join('') +
+      '</select></div>' +
+    '<div class="form-group"><label class="form-label">Observaciones</label>' +
+      '<textarea id="elObs" class="form-control" rows="3">'+(l.observaciones||'')+'</textarea></div>',
+    [{label:"💾 Guardar cambios", cls:"btn-primary", fn:'guardarEdicionLegajo("'+l.id_legajo+'")'}]
+  );
+}
+
+function guardarEdicionLegajo(idLegajo) {
+  callBackend("editarLegajo", {
+    id_legajo:           idLegajo,
+    motivo:              v("elMotivo"),
+    tipo:                v("elTipo"),
+    profesional_a_cargo: v("elProfesional"),
+    estado:              v("elEstado"),
+    observaciones:       v("elObs")
+  }, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Legajo actualizado");
+      cargarLegajos();
+    } else toast("❌ " + res.error);
+  });
+}
+
+function confirmarEliminarLegajo(idLegajo) {
+  if (!confirm("¿Eliminar este legajo y todo su historial? Esta acción no se puede deshacer.")) return;
+  callBackend("eliminarLegajo", {id_legajo: idLegajo}, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Legajo eliminado");
+      cargarLegajos();
+    } else toast("❌ " + res.error);
+  });
+}
+
+function editarEntradaHistorial(idEntrada, idLegajo, idAlumno) {
+  callBackend("getHistorial", {id_legajo: idLegajo}, function(res) {
+    if (!res.ok) { toast("Error"); return; }
+    var h = res.data.filter(function(x){ return x.id_entrada === idEntrada; })[0];
+    if (!h) { toast("Entrada no encontrada"); return; }
+
+    abrirModal("✏️ Editar Entrada",
+      '<div class="form-group"><label class="form-label">Fecha</label>' +
+        '<input id="ehFecha" type="date" class="form-control" value="'+h.fecha+'"></div>' +
+      '<div class="form-group"><label class="form-label">Tipo de intervención</label>' +
+        '<select id="ehTipo" class="form-control">' +
+          ['Entrevista familiar','Entrevista al alumno','Reunión interdisciplinaria','Seguimiento pedagógico','Derivación','Otro'].map(function(t){
+            return '<option'+(t===h.tipo_intervencion?' selected':'')+'>'+t+'</option>';
+          }).join('') +
+        '</select></div>' +
+      '<div class="form-group"><label class="form-label">Descripción</label>' +
+        '<textarea id="ehDesc" class="form-control" rows="3">'+(h.descripcion||'')+'</textarea></div>',
+      [{label:"💾 Guardar", cls:"btn-primary", fn:'guardarEdicionHistorial("'+idEntrada+'","'+idLegajo+'","'+idAlumno+'")'}]
+    );
+  });
+}
+
+function guardarEdicionHistorial(idEntrada, idLegajo, idAlumno) {
+  callBackend("editarHistorial", {
+    id_entrada:         idEntrada,
+    fecha:               v("ehFecha"),
+    tipo_intervencion:   v("ehTipo"),
+    descripcion:         v("ehDesc")
+  }, function(res) {
+    if (res.ok) {
+      toast("✅ Entrada actualizada");
+      verLegajo(idLegajo);
+    } else toast("❌ " + res.error);
+  });
+}
+
+function confirmarEliminarHistorial(idEntrada, idLegajo, idAlumno) {
+  if (!confirm("¿Eliminar esta entrada del historial?")) return;
+  callBackend("eliminarHistorial", {id_entrada: idEntrada}, function(res) {
+    if (res.ok) {
+      toast("✅ Entrada eliminada");
+      verLegajo(idLegajo);
+    } else toast("❌ " + res.error);
   });
 }
 
