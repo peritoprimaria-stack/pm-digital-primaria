@@ -3306,13 +3306,14 @@ function renderListaAusencias(data) {
     return;
   }
   var html = '<div class="table-container"><table class="data-table"><thead><tr>' +
-    '<th>Docente</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Motivo</th><th>Reemplazante</th><th style="text-align:center">Movimiento</th>' +
+    '<th>Docente</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Motivo</th><th>Reemplazante</th><th style="text-align:center">Movimiento</th><th>Acciones</th>' +
     '</tr></thead><tbody>';
-  data.forEach(function(a) {
+  data.forEach(function(a, idx) {
     var d1 = new Date((a.fecha||"")+"T12:00:00");
     var d2 = new Date((a.fecha_hasta||a.fecha||"")+"T12:00:00");
     var dias = Math.round((d2-d1)/(1000*60*60*24))+1;
     var mov = a.movimiento || "No";
+    var dataStr = encodeURIComponent(JSON.stringify(a));
     html += '<tr>' +
       '<td><strong>'+a.docente_nombre+'</strong></td>' +
       '<td>'+a.fecha+'</td>' +
@@ -3323,13 +3324,95 @@ function renderListaAusencias(data) {
       '<td style="text-align:center">' +
         '<span style="font-weight:600;color:'+(mov==="Sí"?"#2E7D32":"var(--text-light)")+'">'+mov+'</span>' +
       '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-right:4px" onclick=\'editarAusencia(decodeURIComponent("'+dataStr+'"))\'>✏️</button>' +
+        '<button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick=\'eliminarAusencia("'+a.fecha+'","'+a.docente_nombre+'")\'>🗑️</button>' +
+      '</td>' +
     '</tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
 }
 
-function calcularImpactoAusencia(nombreDocente, fecha) {
+function editarAusencia(dataStr) {
+  var a = JSON.parse(dataStr);
+  var listaDocentes = (HORARIO_2026._docentes || []).slice().sort(function(x,y){ return x.nombre.localeCompare(y.nombre); });
+  var docenteOpts = listaDocentes.map(function(d){
+    return '<option value="'+d.nombre+'"'+(d.nombre===a.docente_nombre?' selected':'')+'>'+d.nombre+'</option>';
+  }).join('');
+
+  abrirModal("✏️ Editar Ausencia — " + a.docente_nombre,
+    '<div class="form-grid">' +
+      '<div class="form-group"><label class="form-label">Fecha desde *</label>' +
+        '<input id="eaFecha" type="date" class="form-control" value="'+a.fecha+'"></div>' +
+      '<div class="form-group"><label class="form-label">Fecha hasta *</label>' +
+        '<input id="eaFechaHasta" type="date" class="form-control" value="'+(a.fecha_hasta||a.fecha)+'"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Docente *</label>' +
+      '<select id="eaNombre" class="form-control">'+docenteOpts+'</select></div>' +
+    '<div class="form-group"><label class="form-label">Motivo</label>' +
+      '<select id="eaMotivo" class="form-control" onchange="toggleOtraAusenciaEditar()">' +
+        ['Enfermedad','Licencia','Capacitación','Otro'].map(function(m){
+          var sel = a.motivo && a.motivo.startsWith(m) ? ' selected' : '';
+          return '<option'+sel+'>'+m+'</option>';
+        }).join('') +
+      '</select></div>' +
+    '<div class="form-group" id="eaOtraWrap" style="display:'+(a.motivo&&a.motivo.startsWith('Otro')?"block":"none")+'">' +
+      '<label class="form-label">Especificá el motivo</label>' +
+      '<input id="eaOtraTexto" class="form-control" value="'+(a.motivo&&a.motivo.startsWith('Otro:')?a.motivo.replace('Otro: ',''):'')+'"></div>' +
+    '<div class="form-group"><label class="form-label">Reemplazante</label>' +
+      '<input id="eaReemplazante" class="form-control" value="'+(a.reemplazante||'')+'"></div>' +
+    '<div class="form-group"><label class="form-label">¿Va por movimientos?</label>' +
+      '<div style="display:flex;gap:16px;margin-top:6px">' +
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">' +
+          '<input type="radio" name="eaMovimiento" value="Sí"'+(a.movimiento==="Sí"?' checked':'')+' style="accent-color:#B71C1C"> Sí' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">' +
+          '<input type="radio" name="eaMovimiento" value="No"'+(a.movimiento!=="Sí"?' checked':'')+' style="accent-color:#B71C1C"> No' +
+        '</label>' +
+      '</div></div>',
+    [{label:"💾 Guardar cambios", cls:"btn-primary", fn:'guardarEdicionAusencia("'+a.fecha+'","'+a.docente_nombre+'")'}]
+  );
+}
+
+function toggleOtraAusenciaEditar() {
+  var wrap = document.getElementById("eaOtraWrap");
+  if (wrap) wrap.style.display = v("eaMotivo") === "Otro" ? "block" : "none";
+}
+
+function guardarEdicionAusencia(fechaOrig, docenteOrig) {
+  var motivo = v("eaMotivo");
+  if (motivo === "Otro") {
+    var otra = v("eaOtraTexto").trim();
+    if (!otra) { toast("Especificá el motivo"); return; }
+    motivo = "Otro: " + otra;
+  }
+  var movRadio = document.querySelector('input[name="eaMovimiento"]:checked');
+  callBackend("editarAusenciaDocente", {
+    fecha_orig:      fechaOrig,
+    docente_orig:    docenteOrig,
+    fecha:           v("eaFecha"),
+    fecha_hasta:     v("eaFechaHasta"),
+    docente_nombre:  v("eaNombre"),
+    motivo:          motivo,
+    reemplazante:    v("eaReemplazante"),
+    movimiento:      movRadio ? movRadio.value : "No"
+  }, function(res) {
+    if (res.ok) { cerrarModal(); toast("✅ Ausencia actualizada"); cargarAusenciasDocentes(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+function eliminarAusencia(fecha, docente) {
+  if (!confirm("¿Eliminar la ausencia de " + docente + " del " + fecha + "?")) return;
+  callBackend("eliminarAusenciaDocente", {
+    fecha:          fecha,
+    docente_nombre: docente
+  }, function(res) {
+    if (res.ok) { toast("✅ Ausencia eliminada"); cargarAusenciasDocentes(); }
+    else toast("❌ " + res.error);
+  });
+}
   // Convierte la fecha en día de la semana
   var diasMap = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   var d = new Date(fecha + 'T12:00:00');
