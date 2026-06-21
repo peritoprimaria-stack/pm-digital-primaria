@@ -3413,6 +3413,8 @@ function eliminarAusencia(fecha, docente) {
     else toast("❌ " + res.error);
   });
 }
+
+function calcularImpactoAusencia(nombreDocente, fecha) {
   // Convierte la fecha en día de la semana
   var diasMap = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   var d = new Date(fecha + 'T12:00:00');
