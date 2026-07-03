@@ -465,24 +465,24 @@ function construirMenu() {
   nav.innerHTML = "";
 
   var items = [
-    {id:"dashboard", icon:"📊", label:"Dashboard", roles:["director","vicedirector","secretario","maestro","eoe"]},
-    {section:"Gestión", roles:["director","vicedirector","secretario","maestro"]},
-    {id:"asistencia", icon:"📋", label:"Asistencia", roles:["director","vicedirector","secretario","maestro"]},
-    {id:"calificaciones", icon:"📝", label:"Calificaciones", roles:["director","vicedirector","secretario","maestro"]},
-    {id:"alumnos", icon:"👨‍🎓", label:"Alumnos", roles:["director","vicedirector","secretario","maestro"]},
-    {section:"Informes", roles:["director","vicedirector","secretario","maestro"]},
-    {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro"]},
-    {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario"]},
-    {id:"reportes", icon:"📈", label:"Reportes", roles:["director","vicedirector","secretario"]},
-    {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario"]},
-    {id:"reuniones", icon:"🤝", label:"Reuniones de Padres", roles:["director","vicedirector","secretario","maestro"]},
-    {section:"EOE", roles:["director","vicedirector","secretario","eoe"]},
-    {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe"]},
-    {section:"Comunicación", roles:["director","vicedirector","secretario","maestro","eoe"]},
-    {id:"mensajes", icon:"✉️", label:"Mensajes", roles:["director","vicedirector","secretario","maestro","eoe"]},
-    {section:"Administración", roles:["director","vicedirector","secretario"]},
-    {id:"usuarios", icon:"👥", label:"Usuarios", roles:["director","vicedirector","secretario"]},
-    {id:"configuracion", icon:"⚙️", label:"Configuración", roles:["director"]},
+    {id:"dashboard", icon:"📊", label:"Dashboard", roles:["director","vicedirector","secretario","maestro","eoe","representante_legal"]},
+    {section:"Gestión", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"asistencia", icon:"📋", label:"Asistencia", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"calificaciones", icon:"📝", label:"Calificaciones", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"alumnos", icon:"👨‍🎓", label:"Alumnos", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {section:"Informes", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"reportes", icon:"📈", label:"Reportes", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"ausencias_docentes", icon:"👨‍🏫", label:"Aus. Docentes", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"reuniones", icon:"🤝", label:"Reuniones de Padres", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {section:"EOE", roles:["director","vicedirector","secretario","eoe","representante_legal"]},
+    {id:"legajos", icon:"📂", label:"Legajos EOE", roles:["director","vicedirector","secretario","eoe","representante_legal"]},
+    {section:"Comunicación", roles:["director","vicedirector","secretario","maestro","eoe","representante_legal"]},
+    {id:"mensajes", icon:"✉️", label:"Mensajes", roles:["director","vicedirector","secretario","maestro","eoe","representante_legal"]},
+    {section:"Administración", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"usuarios", icon:"👥", label:"Usuarios", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"configuracion", icon:"⚙️", label:"Configuración", roles:["director","representante_legal"]},
   ];
 
   items.forEach(function(item) {
@@ -711,7 +711,7 @@ function getTrimestre(fecha) {
 function renderAsistencia() {
   var pc = document.getElementById("pageContent");
   var hoy = fechaHoy();
-  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var esAdmin = ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol);
   var gradoU   = APP.usuario.rol === "maestro" ? String(APP.usuario.grado) : "";
   var seccionU = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "";
   var trimActual = getTrimestre(hoy);
@@ -931,7 +931,7 @@ function cargarResumenAsistencia() {
 // ════════════════════════════════════════════════════════════
 function renderCalificaciones() {
   var pc = document.getElementById("pageContent");
-  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var esAdmin = ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol);
   var grado = APP.usuario.rol === "maestro" ? String(APP.usuario.grado) : "1";
   var seccion = APP.usuario.rol === "maestro" ? APP.usuario.seccion : "A";
 
@@ -1360,7 +1360,7 @@ function cargarAlertasDashboard() {
 // ════════════════════════════════════════════════════════════
 function renderAlumnos() {
   var pc = document.getElementById("pageContent");
-  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var esAdmin = ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol);
 
   pc.innerHTML = `
   <div class="card">
@@ -1451,7 +1451,7 @@ function verAlumno(al) {
     [
       {label:"📄 Ver boletín", cls:"btn-primary", fn:'verBoletin("'+al.id_alumno+'")'},
       {label:"🩹 Acta accidente", cls:"btn-outline", fn:'abrirActaAccidente("'+al.id_alumno+'")'},
-      {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario"].includes(APP.usuario.rol)}
+      {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)}
     ]
   );
 }
@@ -4055,7 +4055,7 @@ function verMensaje(m) {
 }
 
 function abrirModalNuevoMensaje() {
-  var esAdmin = ["director","vicedirector","secretario"].includes(APP.usuario.rol);
+  var esAdmin = ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol);
   abrirModal("+ Nuevo Mensaje", `
     <div class="form-group"><label class="form-label">Para</label>
       <select id="msgPara" class="form-control">
@@ -4116,6 +4116,7 @@ function abrirModalNuevoUsuario() {
     <div class="form-group"><label class="form-label">Rol *</label>
       <select id="uRol" class="form-control" onchange="toggleGradoUsuario()">
         <option value="director">Director/a</option>
+        <option value="representante_legal">Representante Legal</option>
         <option value="vicedirector">Vicedirector/a</option>
         <option value="secretario">Secretario/a</option>
         <option value="maestro">Maestro/a de grado</option>
