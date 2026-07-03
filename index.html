@@ -1987,6 +1987,7 @@ function verLegajo(id) {
 
       abrirModal("📂 Legajo — " + l.apellido_nombre,
         `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='exportarLegajoAlumnoPDF("${l.id_alumno}","${l.apellido_nombre.replace(/"/g,"&quot;")}")'>📄 Exportar todo (PDF)</button>
           <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='abrirModalEditarLegajo(${JSON.stringify(l).replace(/'/g,"&apos;")})'>✏️ Editar legajo</button>
           <button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick='confirmarEliminarLegajo("${id}")'>🗑️ Eliminar legajo</button>
         </div>
@@ -2023,7 +2024,7 @@ function abrirModalEditarLegajo(l) {
       '<input id="elMotivo" class="form-control" value="'+(l.motivo||'').replace(/"/g,'&quot;')+'"></div>' +
     '<div class="form-group"><label class="form-label">Tipo</label>' +
       '<select id="elTipo" class="form-control">' +
-        ['Pedagógico','Psicológico','Social','Fonoaudiológico','Psicopedagógico','Otro'].map(function(t){
+        ['Seguimiento pedagógico','Problemática familiar','Salud','Ausentismo','Conducta','Otro'].map(function(t){
           return '<option'+(t===l.tipo?' selected':'')+'>'+t+'</option>';
         }).join('') +
       '</select></div>' +
@@ -2067,6 +2068,126 @@ function confirmarEliminarLegajo(idLegajo) {
       cargarLegajos();
     } else toast("❌ " + res.error);
   });
+}
+
+function exportarLegajoAlumnoPDF(idAlumno, nombreAlumno) {
+  toast("Generando PDF...");
+  callBackend("getAlumno", {id_alumno: idAlumno}, function(resAlumno) {
+    var alumno = resAlumno.ok ? resAlumno.data : {};
+    callBackend("getLegajos", {id_alumno: idAlumno}, function(resLeg) {
+      if (!resLeg.ok || resLeg.data.length === 0) {
+        toast("❌ No se encontraron legajos para este alumno");
+        return;
+      }
+      var legajos = resLeg.data.slice().sort(function(a, b) {
+        return (a.fecha_apertura || "").localeCompare(b.fecha_apertura || "");
+      });
+      var pendientes = legajos.length;
+      var historiales = {};
+      legajos.forEach(function(l) {
+        callBackend("getHistorial", {id_legajo: l.id_legajo}, function(resH) {
+          historiales[l.id_legajo] = resH.ok ? resH.data : [];
+          pendientes--;
+          if (pendientes === 0) {
+            generarPDFLegajoAlumno(alumno, nombreAlumno, legajos, historiales);
+          }
+        });
+      });
+    });
+  });
+}
+
+function generarPDFLegajoAlumno(alumno, nombreAlumno, legajos, historiales) {
+  var esc   = (APP.config && APP.config.NOMBRE_ESCUELA)    || "Escuela Primaria";
+  var cue   = (APP.config && APP.config.CUE)               || "";
+  var dist  = (APP.config && APP.config.DISTRITO)          || "";
+  var dom   = (APP.config && APP.config.DOMICILIO_ESCUELA) || "";
+
+  var hoy = new Date();
+  var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var hoyStr = hoy.getDate() + " de " + meses[hoy.getMonth()] + " de " + hoy.getFullYear();
+
+  var datosGenerales =
+    "<div class='datos-grid'>" +
+      "<div><b>Alumno/a:</b> " + (nombreAlumno || "") + "</div>" +
+      "<div><b>Grado actual:</b> " + (alumno.grado || "") + "° " + (alumno.seccion || "") + "</div>" +
+      "<div><b>DNI:</b> " + (alumno.dni || "-") + "</div>" +
+      "<div><b>Fecha de nacimiento:</b> " + (alumno.fecha_nacimiento || "-") + "</div>" +
+      "<div><b>Responsable:</b> " + (alumno.nombre_responsable || "-") + "</div>" +
+      "<div><b>Teléfono responsable:</b> " + (alumno.telefono_responsable || "-") + "</div>" +
+    "</div>";
+
+  var legajosHtml = legajos.map(function(l) {
+    var hist = (historiales[l.id_legajo] || []).slice().sort(function(a, b) {
+      return (a.fecha || "").localeCompare(b.fecha || "");
+    });
+    var histHtml = hist.length > 0
+      ? hist.map(function(h) {
+          return "<div class='entrada'>" +
+            "<div class='entrada-meta'>" + (h.fecha || "") + " · " + (h.tipo_intervencion || "") + " · " + (h.profesional || "") + "</div>" +
+            "<div class='entrada-desc'>" + (h.descripcion || "") + "</div>" +
+          "</div>";
+        }).join("")
+      : "<p class='sin-datos'>Sin entradas en el historial.</p>";
+
+    return "<div class='legajo-bloque'>" +
+      "<div class='legajo-titulo'>Legajo — Apertura: " + (l.fecha_apertura || "") + " &nbsp;·&nbsp; " +
+        "<span class='estado-pill estado-" + (l.estado||"").toLowerCase().replace(/\s+/g,'-') + "'>" + (l.estado || "") + "</span></div>" +
+      "<div class='datos-grid' style='margin:8px 0 10px'>" +
+        "<div><b>Tipo:</b> " + (l.tipo || "") + "</div>" +
+        "<div><b>Profesional a cargo:</b> " + (l.profesional_a_cargo || "") + "</div>" +
+        "<div style='grid-column:1/-1'><b>Motivo:</b> " + (l.motivo || "") + "</div>" +
+        (l.observaciones ? "<div style='grid-column:1/-1'><b>Observaciones:</b> " + l.observaciones + "</div>" : "") +
+      "</div>" +
+      "<div class='hist-titulo'>Historial de intervenciones</div>" +
+      histHtml +
+    "</div>";
+  }).join("");
+
+  var html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Legajo EOE — " + nombreAlumno + "</title>" +
+    "<style>" +
+      "*{box-sizing:border-box;margin:0;padding:0}" +
+      "body{font-family:Arial,sans-serif;font-size:13px;color:#000;padding:32px 40px;max-width:800px;margin:0 auto}" +
+      ".cabecera{text-align:center;border-bottom:2px solid #B71C1C;padding-bottom:12px;margin-bottom:20px}" +
+      ".escuela{font-size:18px;font-weight:bold;color:#B71C1C;margin-bottom:4px}" +
+      ".meta{font-size:11px;color:#555}" +
+      ".fecha-emision{text-align:right;font-size:12px;margin-bottom:20px;color:#555}" +
+      ".titulo{text-align:center;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;color:#212121}" +
+      ".datos-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:13px;background:#fafafa;border:1px solid #eee;border-radius:6px;padding:12px 16px}" +
+      ".legajo-bloque{border:1px solid #ddd;border-radius:8px;padding:14px 16px;margin-bottom:18px;page-break-inside:avoid}" +
+      ".legajo-titulo{font-size:14px;font-weight:bold;color:#B71C1C;margin-bottom:4px}" +
+      ".estado-pill{display:inline-block;font-size:11px;font-weight:normal;padding:1px 8px;border-radius:10px;background:#e0e0e0;color:#333}" +
+      ".hist-titulo{font-size:12px;font-weight:bold;text-transform:uppercase;color:#555;margin:10px 0 6px;letter-spacing:0.5px}" +
+      ".entrada{border-left:3px solid #B71C1C;padding:6px 10px;margin-bottom:8px;background:#f9f9f9;border-radius:0 6px 6px 0}" +
+      ".entrada-meta{font-size:11px;color:#666;margin-bottom:2px}" +
+      ".entrada-desc{font-size:13px}" +
+      ".sin-datos{color:#888;font-size:12px;font-style:italic}" +
+      ".no-print{text-align:center;margin:20px 0}" +
+      ".btn-imp{padding:10px 24px;background:#B71C1C;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}" +
+      "@media print{.no-print{display:none}}" +
+    "</style></head><body>" +
+
+    "<div class='cabecera'>" +
+      "<div class='escuela'>" + esc + "</div>" +
+      "<div class='meta'>" + (cue?"CUE: "+cue+" &nbsp;|&nbsp; ":"") + (dist?"Distrito: "+dist+" &nbsp;|&nbsp; ":"") + (dom?dom:"") + "</div>" +
+    "</div>" +
+
+    "<div class='fecha-emision'>" + esc + ", " + hoyStr + "</div>" +
+
+    "<div class='titulo'>Legajo EOE completo</div>" +
+
+    datosGenerales +
+
+    "<div style='height:16px'></div>" +
+
+    legajosHtml +
+
+    "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>" +
+    "</body></html>";
+
+  var win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
 }
 
 function editarEntradaHistorial(idEntrada, idLegajo, idAlumno) {
