@@ -204,6 +204,8 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px}
 /* ── LEGAJO ───────────────────────────────────────────── */
 .legajo-card{border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;cursor:pointer;transition:.15s}
 .legajo-card:hover{border-color:var(--primary);background:#f5f8ff}
+.legajo-card.legajo-fijado{border-color:#F9A825;background:#FFFBEA}
+.legajo-card.legajo-fijado:hover{background:#FFF6D9}
 .legajo-card .legajo-header{display:flex;justify-content:space-between;align-items:flex-start}
 .legajo-card .legajo-nombre{font-weight:600;font-size:14px}
 .legajo-card .legajo-meta{font-size:12px;color:var(--text-light);margin-top:4px}
@@ -1952,12 +1954,22 @@ function cargarLegajos() {
       document.getElementById("legajosList").innerHTML = '<div class="alert alert-info">No hay legajos.</div>';
       return;
     }
-    var html = res.data.map(function(l) {
-      return '<div class="legajo-card" onclick=\'verLegajo("'+l.id_legajo+'")\'>'
+    var lista = res.data.slice().sort(function(a, b) {
+      var favA = (a.favorito === true || a.favorito === "TRUE") ? 1 : 0;
+      var favB = (b.favorito === true || b.favorito === "TRUE") ? 1 : 0;
+      if (favA !== favB) return favB - favA;
+      return (b.fecha_apertura || "").localeCompare(a.fecha_apertura || "");
+    });
+    var html = lista.map(function(l) {
+      var esFav = (l.favorito === true || l.favorito === "TRUE");
+      return '<div class="legajo-card'+(esFav?' legajo-fijado':'')+'" onclick=\'verLegajo("'+l.id_legajo+'")\'>'
         +'<div class="legajo-header">'
-        +'<div><div class="legajo-nombre">'+l.apellido_nombre+'</div>'
+        +'<div><div class="legajo-nombre">'+(esFav?'📌 ':'')+l.apellido_nombre+'</div>'
         +'<div class="legajo-meta">'+l.grado+'° '+l.seccion+' · Apertura: '+l.fecha_apertura+' · '+l.profesional_a_cargo+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'
+        +'<button onclick=\'event.stopPropagation();toggleFavoritoLegajo("'+l.id_legajo+'")\' style="border:none;background:none;cursor:pointer;font-size:16px" title="'+(esFav?'Desfijar':'Fijar')+'">'+(esFav?'📌':'📍')+'</button>'
         +'<span class="estado-badge estado-'+l.estado+'">'+l.estado+'</span>'
+        +'</div>'
         +'</div>'
         +'<div style="font-size:12px;color:var(--text-light);margin-top:6px">'+l.motivo+'</div>'
         +'</div>';
@@ -1985,8 +1997,10 @@ function verLegajo(id) {
           }).join("")
         : '<p style="color:var(--text-light);font-size:13px">Sin entradas en el historial.</p>';
 
-      abrirModal("📂 Legajo — " + l.apellido_nombre,
+      var esFav = (l.favorito === true || l.favorito === "TRUE");
+      abrirModal((esFav?"📌 ":"📂 ") + "Legajo — " + l.apellido_nombre,
         `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='toggleFavoritoLegajo("${id}",true)'>${esFav?'📌 Desfijar':'📍 Fijar legajo'}</button>
           <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='exportarLegajoAlumnoPDF("${l.id_alumno}","${l.apellido_nombre.replace(/"/g,"&quot;")}")'>📄 Exportar todo (PDF)</button>
           <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='abrirModalEditarLegajo(${JSON.stringify(l).replace(/'/g,"&apos;")})'>✏️ Editar legajo</button>
           <button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick='confirmarEliminarLegajo("${id}")'>🗑️ Eliminar legajo</button>
@@ -2059,6 +2073,16 @@ function guardarEdicionLegajo(idLegajo) {
   });
 }
 
+function toggleFavoritoLegajo(idLegajo, cerrarModalAlTerminar) {
+  callBackend("toggleFavoritoLegajo", {id_legajo: idLegajo}, function(res) {
+    if (res.ok) {
+      toast(res.data.favorito ? "📌 Legajo fijado" : "Legajo desfijado");
+      if (cerrarModalAlTerminar) cerrarModal();
+      cargarLegajos();
+    } else toast("❌ " + res.error);
+  });
+}
+
 function confirmarEliminarLegajo(idLegajo) {
   if (!confirm("¿Eliminar este legajo y todo su historial? Esta acción no se puede deshacer.")) return;
   callBackend("eliminarLegajo", {id_legajo: idLegajo}, function(res) {
@@ -2080,6 +2104,9 @@ function exportarLegajoAlumnoPDF(idAlumno, nombreAlumno) {
         return;
       }
       var legajos = resLeg.data.slice().sort(function(a, b) {
+        var favA = (a.favorito === true || a.favorito === "TRUE") ? 1 : 0;
+        var favB = (b.favorito === true || b.favorito === "TRUE") ? 1 : 0;
+        if (favA !== favB) return favB - favA;
         return (a.fecha_apertura || "").localeCompare(b.fecha_apertura || "");
       });
       var pendientes = legajos.length;
@@ -2130,8 +2157,9 @@ function generarPDFLegajoAlumno(alumno, nombreAlumno, legajos, historiales) {
         }).join("")
       : "<p class='sin-datos'>Sin entradas en el historial.</p>";
 
-    return "<div class='legajo-bloque'>" +
-      "<div class='legajo-titulo'>Legajo — Apertura: " + (l.fecha_apertura || "") + " &nbsp;·&nbsp; " +
+    var esFav = (l.favorito === true || l.favorito === "TRUE");
+    return "<div class='legajo-bloque"+(esFav?" legajo-fijado-pdf":"")+"'>" +
+      "<div class='legajo-titulo'>" + (esFav ? "📌 " : "") + "Legajo — Apertura: " + (l.fecha_apertura || "") + " &nbsp;·&nbsp; " +
         "<span class='estado-pill estado-" + (l.estado||"").toLowerCase().replace(/\s+/g,'-') + "'>" + (l.estado || "") + "</span></div>" +
       "<div class='datos-grid' style='margin:8px 0 10px'>" +
         "<div><b>Tipo:</b> " + (l.tipo || "") + "</div>" +
@@ -2155,6 +2183,7 @@ function generarPDFLegajoAlumno(alumno, nombreAlumno, legajos, historiales) {
       ".titulo{text-align:center;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;color:#212121}" +
       ".datos-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:13px;background:#fafafa;border:1px solid #eee;border-radius:6px;padding:12px 16px}" +
       ".legajo-bloque{border:1px solid #ddd;border-radius:8px;padding:14px 16px;margin-bottom:18px;page-break-inside:avoid}" +
+      ".legajo-fijado-pdf{border-color:#F9A825;background:#FFFBEA}" +
       ".legajo-titulo{font-size:14px;font-weight:bold;color:#B71C1C;margin-bottom:4px}" +
       ".estado-pill{display:inline-block;font-size:11px;font-weight:normal;padding:1px 8px;border-radius:10px;background:#e0e0e0;color:#333}" +
       ".hist-titulo{font-size:12px;font-weight:bold;text-transform:uppercase;color:#555;margin:10px 0 6px;letter-spacing:0.5px}" +
