@@ -1379,6 +1379,7 @@ function renderAlumnos() {
         <option value="B">B</option>
       </select>
       <input type="text" id="alumBuscar" class="form-control" style="width:200px" placeholder="🔍 Buscar..." oninput="filtrarAlumnos()">
+      ${esAdmin ? '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-light);margin-left:8px"><input type="checkbox" id="alumVerInactivos" onchange="cargarAlumnos()"> Ver dados de baja</label>' : ''}
     </div>
     <div id="alumnosTabla">Cargando...</div>
   </div>`;
@@ -1395,42 +1396,58 @@ var alumnosLista = [];
 function cargarAlumnos() {
   var grado   = document.getElementById("alumGrado").value;
   var seccion = document.getElementById("alumSeccion").value;
-  callBackend("getAlumnos", {grado: grado, seccion: seccion}, function(res) {
+  var chkInactivos = document.getElementById("alumVerInactivos");
+  var soloInactivos = chkInactivos ? chkInactivos.checked : false;
+  callBackend("getAlumnos", {grado: grado, seccion: seccion, solo_inactivos: soloInactivos}, function(res) {
     if (!res.ok) { document.getElementById("alumnosTabla").innerHTML = "<p>Error</p>"; return; }
     alumnosLista = res.data;
-    renderTablaAlumnos(alumnosLista);
+    renderTablaAlumnos(alumnosLista, soloInactivos);
   });
 }
 
 function filtrarAlumnos() {
   var q = document.getElementById("alumBuscar").value.toLowerCase();
+  var chkInactivos = document.getElementById("alumVerInactivos");
+  var soloInactivos = chkInactivos ? chkInactivos.checked : false;
   var filtrados = alumnosLista.filter(function(a) {
     return (a.apellido + " " + a.nombre + " " + a.dni).toLowerCase().includes(q);
   });
-  renderTablaAlumnos(filtrados);
+  renderTablaAlumnos(filtrados, soloInactivos);
 }
 
-function renderTablaAlumnos(lista) {
+function renderTablaAlumnos(lista, soloInactivos) {
   if (lista.length === 0) {
-    document.getElementById("alumnosTabla").innerHTML = '<div class="alert alert-info">No hay alumnos para mostrar.</div>';
+    document.getElementById("alumnosTabla").innerHTML = '<div class="alert alert-info">'+(soloInactivos ? 'No hay alumnos dados de baja.' : 'No hay alumnos para mostrar.')+'</div>';
     return;
   }
   var html = '<div class="table-container"><table class="data-table"><thead><tr>'
     +'<th>Apellido y Nombre</th><th>DNI</th><th>Grado</th><th>Sección</th><th>Responsable</th><th>Teléfono</th><th>Acciones</th>'
     +'</tr></thead><tbody>';
   lista.forEach(function(a) {
-    html += '<tr>'
+    html += '<tr'+(soloInactivos?' style="opacity:.7"':'')+'>'
       +'<td style="font-weight:500">'+a.apellido+', '+a.nombre+'</td>'
       +'<td>'+a.dni+'</td>'
       +'<td style="text-align:center">'+a.grado+'°</td>'
       +'<td style="text-align:center">'+a.seccion+'</td>'
       +'<td>'+a.nombre_responsable+'</td>'
       +'<td>'+a.telefono_responsable+'</td>'
-      +'<td><button class="btn btn-outline btn-sm" onclick=\'verAlumno('+JSON.stringify(a)+')\'>👁 Ver</button></td>'
+      +'<td>'
+        +(soloInactivos
+          ? '<button class="btn btn-outline btn-sm" onclick=\'confirmarReactivarAlumno("'+a.id_alumno+'","'+(a.apellido+', '+a.nombre).replace(/'/g,"&#39;")+'")\'>♻️ Reactivar</button>'
+          : '<button class="btn btn-outline btn-sm" onclick=\'verAlumno('+JSON.stringify(a)+')\'>👁 Ver</button>')
+      +'</td>'
       +'</tr>';
   });
   html += "</tbody></table></div>";
   document.getElementById("alumnosTabla").innerHTML = html;
+}
+
+function confirmarReactivarAlumno(idAlumno, nombre) {
+  if (!confirm("¿Reactivar a " + nombre + "? Volverá a aparecer en las listas activas.")) return;
+  callBackend("reactivarAlumno", {id_alumno: idAlumno}, function(res) {
+    if (res.ok) { toast("✅ Alumno reactivado"); cargarAlumnos(); }
+    else toast("❌ " + res.error);
+  });
 }
 
 function verAlumno(al) {
@@ -1451,9 +1468,21 @@ function verAlumno(al) {
     [
       {label:"📄 Ver boletín", cls:"btn-primary", fn:'verBoletin("'+al.id_alumno+'")'},
       {label:"🩹 Acta accidente", cls:"btn-outline", fn:'abrirActaAccidente("'+al.id_alumno+'")'},
-      {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)}
+      {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)},
+      {label:"🚫 Dar de baja", cls:"btn-danger", fn:'confirmarDarDeBajaAlumno("'+al.id_alumno+'","'+(al.apellido+', '+al.nombre).replace(/'/g,"&#39;")+'")', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)}
     ]
   );
+}
+
+function confirmarDarDeBajaAlumno(idAlumno, nombre) {
+  if (!confirm("¿Dar de baja a " + nombre + "?\n\nEsto lo saca de las listas activas (asistencia, calificaciones, etc.) pero conserva todo su historial. Podés reactivarlo más adelante desde \"Ver dados de baja\".")) return;
+  callBackend("desactivarAlumno", {id_alumno: idAlumno}, function(res) {
+    if (res.ok) {
+      cerrarModal();
+      toast("✅ Alumno dado de baja");
+      cargarAlumnos();
+    } else toast("❌ " + res.error);
+  });
 }
 
 function abrirModalNuevoAlumno() {
