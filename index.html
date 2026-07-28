@@ -482,6 +482,7 @@ function construirMenu() {
     {id:"mensajes", icon:"✉️", label:"Mensajes", roles:["director","vicedirector","secretario","maestro","eoe","representante_legal"]},
     {section:"Administración", roles:["director","vicedirector","secretario","representante_legal"]},
     {id:"usuarios", icon:"👥", label:"Usuarios", roles:["director","vicedirector","secretario","representante_legal"]},
+    {id:"cierreciclo", icon:"🔄", label:"Cierre de Ciclo", roles:["director","vicedirector","secretario","representante_legal"]},
     {id:"configuracion", icon:"⚙️", label:"Configuración", roles:["director","representante_legal"]},
   ];
 
@@ -515,7 +516,8 @@ function navegarA(pagina) {
     dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
     alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes",
     ausencias_docentes:"Ausencias Docentes", reuniones:"Reuniones de Padres",
-    legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios", configuracion:"Configuración"
+    legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios",
+    cierreciclo:"Cierre de Ciclo", configuracion:"Configuración"
   };
   document.getElementById("pageTitle").textContent = titulos[pagina] || pagina;
 
@@ -532,6 +534,7 @@ function navegarA(pagina) {
     legajos: renderLegajos,
     mensajes: renderMensajes,
     usuarios: renderUsuarios,
+    cierreciclo: renderCierreCiclo,
     configuracion: renderConfiguracion
   };
 
@@ -1447,6 +1450,171 @@ function confirmarReactivarAlumno(idAlumno, nombre) {
   callBackend("reactivarAlumno", {id_alumno: idAlumno}, function(res) {
     if (res.ok) { toast("✅ Alumno reactivado"); cargarAlumnos(); }
     else toast("❌ " + res.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CIERRE DE CICLO LECTIVO
+// ════════════════════════════════════════════════════════════
+function renderCierreCiclo() {
+  var pc = document.getElementById("pageContent");
+  pc.innerHTML = '<div class="card"><div class="card-title">🔄 Cierre de Ciclo Lectivo</div><div id="cierreCicloBody">Cargando alumnos...</div></div>';
+  callBackend("getAlumnos", {ciclo_lectivo: APP.cicloLectivo}, function(res) {
+    if (!res.ok) { document.getElementById("cierreCicloBody").innerHTML = "<p>Error al cargar alumnos</p>"; return; }
+    pintarWizardCierreCiclo(res.data);
+  });
+}
+
+function pintarWizardCierreCiclo(alumnos) {
+  var cicloNuevoDefault = String(Number(APP.cicloLectivo) + 1);
+
+  var grupos = {};
+  alumnos.forEach(function(a) {
+    var key = a.grado + "|" + a.seccion;
+    if (!grupos[key]) grupos[key] = [];
+    grupos[key].push(a);
+  });
+  var keysOrdenadas = Object.keys(grupos).sort();
+
+  var html = '<div class="alert alert-info" style="margin-bottom:16px">'
+    + 'Este asistente promueve, hace repetir o da de baja/egresa a los alumnos, asigna a los docentes titulares del año próximo y actualiza el ciclo lectivo activo. '
+    + '<b>No borra ningún dato:</b> antes de aplicar cualquier cambio se genera automáticamente una copia de respaldo completa de Alumnos, Asistencia y Calificaciones.'
+    + '</div>';
+
+  html += '<div class="form-group" style="max-width:220px;margin-bottom:22px"><label class="form-label">Ciclo lectivo nuevo</label>'
+    + '<input id="ccNuevoCiclo" class="form-control" value="' + cicloNuevoDefault + '"></div>';
+
+  html += '<h3 style="margin:10px 0 12px">👨‍🎓 Alumnos — ' + alumnos.length + ' activos en ' + APP.cicloLectivo + '</h3>';
+
+  keysOrdenadas.forEach(function(key) {
+    var lista = grupos[key];
+    var grado = lista[0].grado, seccion = lista[0].seccion;
+    var esSexto = String(grado) === "6";
+
+    lista.sort(function(x, y) { return (x.apellido + x.nombre).localeCompare(y.apellido + y.nombre); });
+
+    html += '<div class="card" style="margin-bottom:14px;background:#fafafa">';
+    html += '<div style="font-weight:600;margin-bottom:10px">' + grado + '° ' + seccion
+      + ' <span style="color:var(--text-light);font-size:12px;font-weight:400">(' + lista.length + ' alumnos)</span></div>';
+
+    lista.forEach(function(al) {
+      var estId  = 'cc_est_' + al.id_alumno;
+      var secId  = 'cc_sec_' + al.id_alumno;
+      var motId  = 'cc_mot_' + al.id_alumno;
+
+      var opciones = esSexto
+        ? '<option value="egresa" selected>🎓 Egresa</option><option value="repite">🔁 Repite 6°</option><option value="se_va">🚪 Se va de la escuela</option>'
+        : '<option value="promueve" selected>⬆️ Promueve a ' + (Number(grado) + 1) + '°</option><option value="repite">🔁 Repite ' + grado + '°</option><option value="se_va">🚪 Se va de la escuela</option>';
+
+      html += '<div class="cc-alumno-row" data-id="' + al.id_alumno + '" data-grado="' + grado + '" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #eee;flex-wrap:wrap">'
+        + '<div style="flex:1;min-width:180px">' + al.apellido + ', ' + al.nombre + '</div>'
+        + '<select id="' + estId + '" class="form-control" style="width:190px" onchange="ccCambioEstadoAlumno(\'' + al.id_alumno + '\')">' + opciones + '</select>'
+        + '<select id="' + secId + '" class="form-control" style="width:70px">'
+          + '<option value="A"' + (seccion === "A" ? " selected" : "") + '>A</option>'
+          + '<option value="B"' + (seccion === "B" ? " selected" : "") + '>B</option>'
+        + '</select>'
+        + '<input type="text" id="' + motId + '" class="form-control" style="width:220px;display:none" '
+          + 'value="' + (esSexto ? 'Egresado - finalizó primaria' : 'Se retira de la escuela') + '">'
+        + '</div>';
+    });
+
+    html += '</div>';
+  });
+
+  html += '<h3 style="margin:26px 0 12px">👩‍🏫 Docentes titulares — año próximo</h3>';
+  html += '<div id="ccDocentes" class="card" style="background:#fafafa">Cargando docentes...</div>';
+
+  html += '<div style="margin-top:26px;text-align:right">'
+    + '<button class="btn btn-primary" style="padding:12px 28px;font-size:15px" onclick="ccConfirmarEjecucion()">🚀 Ejecutar cierre de ciclo</button>'
+    + '</div>';
+
+  document.getElementById("cierreCicloBody").innerHTML = html;
+  pintarDocentesCierreCiclo();
+}
+
+function ccCambioEstadoAlumno(id) {
+  var est = document.getElementById('cc_est_' + id).value;
+  var sec = document.getElementById('cc_sec_' + id);
+  var mot = document.getElementById('cc_mot_' + id);
+  var seVaOEgresa = (est === "se_va" || est === "egresa");
+  sec.style.display = seVaOEgresa ? "none" : "inline-block";
+  mot.style.display = seVaOEgresa ? "inline-block" : "none";
+}
+
+function pintarDocentesCierreCiclo() {
+  var combos = Object.keys(HORARIO_2026).filter(function(k) { return k !== "_docentes"; }).sort();
+  var docentes = (HORARIO_2026._docentes || []).slice().sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+  var html = '';
+  combos.forEach(function(key) {
+    var curso = HORARIO_2026[key];
+    var selId = 'cc_doc_' + key;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">'
+      + '<div style="width:70px;font-weight:600">' + curso.grado + '° ' + curso.seccion + '</div>'
+      + '<select id="' + selId + '" class="form-control" style="flex:1;max-width:400px">'
+        + '<option value="">— Sin asignar —</option>'
+        + docentes.map(function(d) {
+            var sel = (d.nombre === curso.maestra_titular) ? ' selected' : '';
+            return '<option value="' + d.nombre.replace(/"/g, '&quot;') + '"' + sel + '>' + d.nombre + ' (' + d.rol + ')</option>';
+          }).join('')
+      + '</select>'
+      + '</div>';
+  });
+  document.getElementById("ccDocentes").innerHTML = html || '<p style="color:var(--text-light)">No hay cursos cargados. Revisá la hoja "Cursos".</p>';
+}
+
+function ccConfirmarEjecucion() {
+  var cicloNuevo = document.getElementById("ccNuevoCiclo").value.trim();
+  if (!cicloNuevo) { toast("❌ Ingresá el ciclo lectivo nuevo"); return; }
+
+  var filas = document.querySelectorAll(".cc-alumno-row");
+  var alumnosPayload = [];
+  var promovidos = 0, repiten = 0, bajas = 0;
+
+  filas.forEach(function(row) {
+    var id = row.getAttribute("data-id");
+    var grado = row.getAttribute("data-grado");
+    var est = document.getElementById('cc_est_' + id).value;
+    var sec = document.getElementById('cc_sec_' + id);
+    var mot = document.getElementById('cc_mot_' + id);
+
+    if (est === "promueve") {
+      alumnosPayload.push({ id_alumno: id, continua: true, grado_nuevo: String(Number(grado) + 1), seccion_nueva: sec.value });
+      promovidos++;
+    } else if (est === "repite") {
+      alumnosPayload.push({ id_alumno: id, continua: true, grado_nuevo: String(grado), seccion_nueva: sec.value });
+      repiten++;
+    } else {
+      alumnosPayload.push({ id_alumno: id, continua: false, motivo_baja: mot.value });
+      bajas++;
+    }
+  });
+
+  var cursosPayload = [];
+  Object.keys(HORARIO_2026).filter(function(k) { return k !== "_docentes"; }).forEach(function(key) {
+    var curso = HORARIO_2026[key];
+    var sel = document.getElementById('cc_doc_' + key);
+    cursosPayload.push({ grado: curso.grado, seccion: curso.seccion, turno: curso.turno, maestra_titular: sel ? sel.value : curso.maestra_titular });
+  });
+
+  var resumen = "Se van a promover " + promovidos + " alumnos, hacer repetir a " + repiten + " y dar de baja/egresar a " + bajas + ".\n"
+    + "El ciclo lectivo pasará de " + APP.cicloLectivo + " a " + cicloNuevo + ".\n\n"
+    + "Antes de aplicar los cambios se va a generar una copia de respaldo completa de Alumnos, Asistencia y Calificaciones.\n\n"
+    + "¿Confirmás que querés ejecutar el cierre de ciclo? Esta acción no tiene un botón de deshacer.";
+
+  if (!confirm(resumen)) return;
+
+  toast("Procesando cierre de ciclo, por favor esperá...");
+  callBackend("ejecutarCierreCiclo", { ciclo_nuevo: cicloNuevo, alumnos: alumnosPayload, cursos: cursosPayload }, function(res) {
+    if (res.ok) {
+      toast("✅ Cierre de ciclo ejecutado: " + res.data.promovidos + " continúan, " + res.data.bajas + " bajas/egresos");
+      cargarConfig(function() {
+        cargarHorario(function() {
+          navegarA("dashboard");
+        });
+      });
+    } else {
+      toast("❌ " + res.error);
+    }
   });
 }
 
