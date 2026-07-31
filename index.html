@@ -253,11 +253,47 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px}
       Ingresar con Google
     </button>
     <div class="login-error" id="loginError"></div>
+
+    <div style="margin:20px 0;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:12px;color:var(--text-light)">o</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <button class="btn-google" id="btnMostrarFamilia" onclick="mostrarLoginFamilia()" style="border-color:var(--primary);color:var(--primary)">
+      👨‍👩‍👧 Soy familia (portal de padres)
+    </button>
+
+    <div id="loginFamiliaBox" style="display:none;margin-top:16px;text-align:left">
+      <div id="ffPasoLogin">
+        <div class="form-group"><label class="form-label">DNI del alumno/a</label>
+          <input id="ffDni" class="form-control" placeholder="Ej: 40123456"></div>
+        <div class="form-group"><label class="form-label">Clave</label>
+          <input id="ffClave" type="password" class="form-control" placeholder="Tu clave"></div>
+        <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="familiaLoginSubmit()">Ingresar</button>
+        <div style="text-align:center;margin-top:10px">
+          <a href="#" style="font-size:12px;color:var(--primary)" onclick="event.preventDefault();familiaOlvideClave()">¿Olvidaste tu clave?</a>
+        </div>
+      </div>
+      <div id="ffPasoCrearClave" style="display:none">
+        <div class="alert alert-info" style="font-size:12px;margin-bottom:10px">Es tu primer ingreso. Creá una clave para <b id="ffNombreAlumno"></b>.</div>
+        <div class="form-group"><label class="form-label">Nueva clave</label>
+          <input id="ffClaveNueva" type="password" class="form-control" placeholder="Mínimo 4 caracteres"></div>
+        <div class="form-group"><label class="form-label">Confirmar clave</label>
+          <input id="ffClaveNuevaConfirmar" type="password" class="form-control"></div>
+        <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="familiaCrearClaveSubmit()">Crear clave e ingresar</button>
+      </div>
+      <div class="login-error" id="loginErrorFamilia" style="display:none"></div>
+    </div>
   </div>
 </div>
 
+<!-- PORTAL FAMILIAS -->
+<div id="appFamilia" style="display:none"></div>
+
 <!-- APP -->
 <div id="app">
+
 <div class="layout">
 
   <!-- SIDEBAR -->
@@ -420,6 +456,217 @@ function logout() {
   firebase.auth().signOut().then(function() {
     APP.usuario = null;
     mostrarLogin();
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// PORTAL FAMILIAS
+// ════════════════════════════════════════════════════════════
+var FAMILIA = null; // {dni, clave, id_alumno, nombre, apellido, grado, seccion}
+
+function mostrarLoginFamilia() {
+  document.getElementById("btnMostrarFamilia").style.display = "none";
+  document.getElementById("loginFamiliaBox").style.display = "block";
+}
+
+function familiaErr(msg) {
+  var e = document.getElementById("loginErrorFamilia");
+  e.textContent = msg;
+  e.style.display = "block";
+}
+
+function familiaLoginSubmit() {
+  var dni = document.getElementById("ffDni").value.trim();
+  var clave = document.getElementById("ffClave").value;
+  if (!dni || !clave) { familiaErr("Completá DNI y clave"); return; }
+  document.getElementById("loginErrorFamilia").style.display = "none";
+  callBackendFamilia("loginFamilia", {dni: dni, clave: clave}, function(res) {
+    if (!res.ok) { familiaErr(res.error); return; }
+    if (res.data.necesita_crear_clave) {
+      document.getElementById("ffPasoLogin").style.display = "none";
+      document.getElementById("ffPasoCrearClave").style.display = "block";
+      document.getElementById("ffNombreAlumno").textContent = res.data.nombre + " " + res.data.apellido;
+      window._ffDniPendiente = dni;
+      return;
+    }
+    FAMILIA = {dni: dni, clave: clave, id_alumno: res.data.id_alumno, nombre: res.data.nombre, apellido: res.data.apellido, grado: res.data.grado, seccion: res.data.seccion};
+    iniciarPortalFamilia();
+  });
+}
+
+function familiaCrearClaveSubmit() {
+  var nueva = document.getElementById("ffClaveNueva").value;
+  var confirmar = document.getElementById("ffClaveNuevaConfirmar").value;
+  if (!nueva || nueva.length < 4) { familiaErr("La clave debe tener al menos 4 caracteres"); return; }
+  if (nueva !== confirmar) { familiaErr("Las claves no coinciden"); return; }
+  document.getElementById("loginErrorFamilia").style.display = "none";
+  callBackendFamilia("crearClaveFamilia", {dni: window._ffDniPendiente, clave: nueva}, function(res) {
+    if (!res.ok) { familiaErr(res.error); return; }
+    document.getElementById("ffDni").value = window._ffDniPendiente;
+    document.getElementById("ffClave").value = nueva;
+    document.getElementById("ffPasoCrearClave").style.display = "none";
+    document.getElementById("ffPasoLogin").style.display = "block";
+    familiaLoginSubmit();
+  });
+}
+
+function familiaOlvideClave() {
+  var dni = document.getElementById("ffDni").value.trim();
+  if (!dni) { familiaErr("Ingresá primero el DNI del alumno/a"); return; }
+  if (!confirm("¿Enviar una clave nueva al email de contacto registrado?")) return;
+  callBackendFamilia("recuperarClaveFamilia", {dni: dni}, function(res) {
+    if (!res.ok) { familiaErr(res.error); return; }
+    toast("✅ " + res.data.mensaje);
+  });
+}
+
+function callBackendFamilia(accion, data, callback) {
+  var params = Object.assign({}, data, {accion: accion});
+  var qs = Object.keys(params).map(function(k) {
+    var val = params[k];
+    if (typeof val === "object") val = JSON.stringify(val);
+    return encodeURIComponent(k) + "=" + encodeURIComponent(val || "");
+  }).join("&");
+
+  var url = BACKEND_URL + "?" + qs;
+
+  fetch(url, { method: "GET", redirect: "follow" })
+  .then(function(r) { return r.json(); })
+  .then(function(json) { callback(json); })
+  .catch(function(err) {
+    var cb = "cbf_" + Date.now();
+    window[cb] = function(json) { delete window[cb]; callback(json); };
+    var s = document.createElement("script");
+    s.src = url + "&callback=" + cb;
+    document.head.appendChild(s);
+    setTimeout(function() {
+      if (window[cb]) {
+        delete window[cb];
+        callback({ok: false, error: "Timeout - reintentá"});
+      }
+    }, 15000);
+  });
+}
+
+function iniciarPortalFamilia() {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("app").style.display = "none";
+  var el = document.getElementById("appFamilia");
+  el.style.display = "block";
+  el.innerHTML =
+    '<div class="layout">' +
+      '<aside class="sidebar">' +
+        '<div class="sidebar-header"><h2 style="color:#fff;font-size:16px">👨‍👩‍👧 Portal Familias</h2>' +
+          '<div style="color:#ffffffaa;font-size:12px;margin-top:6px">' + FAMILIA.nombre + ' ' + FAMILIA.apellido + '<br>' + FAMILIA.grado + '° ' + FAMILIA.seccion + '</div></div>' +
+        '<nav class="sidebar-nav">' +
+          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaAsistencia()">📋 Asistencia</a>' +
+          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaCalificaciones()">📝 Notas (vista preliminar)</a>' +
+          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaMensajes()">✉️ Mensajes</a>' +
+          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaReuniones()">🤝 Reuniones de Padres</a>' +
+          '<a href="#" class="nav-item" onclick="event.preventDefault();familiaCambiarClaveModal()">🔑 Cambiar mi clave</a>' +
+        '</nav>' +
+        '<button class="btn btn-outline" style="margin:16px;width:calc(100% - 32px)" onclick="familiaLogout()">← Cerrar sesión</button>' +
+      '</aside>' +
+      '<main class="main-content"><div id="familiaContent" style="padding:24px"></div></main>' +
+    '</div>';
+  renderFamiliaAsistencia();
+}
+
+function familiaLogout() {
+  FAMILIA = null;
+  document.getElementById("appFamilia").style.display = "none";
+  document.getElementById("appFamilia").innerHTML = "";
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("btnMostrarFamilia").style.display = "block";
+  document.getElementById("loginFamiliaBox").style.display = "none";
+  document.getElementById("ffDni").value = "";
+  document.getElementById("ffClave").value = "";
+}
+
+function renderFamiliaAsistencia() {
+  var c = document.getElementById("familiaContent");
+  c.innerHTML = "<h2>📋 Asistencia de " + FAMILIA.nombre + "</h2><div id='faTabla'>Cargando...</div>";
+  callBackendFamilia("getAsistenciaFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(res) {
+    if (!res.ok) { document.getElementById("faTabla").innerHTML = "<p>❌ " + res.error + "</p>"; return; }
+    if (res.data.length === 0) { document.getElementById("faTabla").innerHTML = "<p>Todavía no hay registros de asistencia.</p>"; return; }
+    var html = "<table class='data-table'><thead><tr><th>Fecha</th><th>Estado</th><th>Observación</th></tr></thead><tbody>";
+    res.data.forEach(function(a) {
+      var estadoTxt = a.estado === "P" ? "✅ Presente" : a.estado === "A" ? "❌ Ausente" : a.estado === "T" ? "🕒 Tarde" : a.estado;
+      html += "<tr><td>" + a.fecha + "</td><td>" + estadoTxt + "</td><td>" + (a.observacion || "-") + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    document.getElementById("faTabla").innerHTML = html;
+  });
+}
+
+function renderFamiliaCalificaciones() {
+  var c = document.getElementById("familiaContent");
+  c.innerHTML = "<h2>📝 Notas de " + FAMILIA.nombre + "</h2>" +
+    "<div class='alert alert-info' style='margin-bottom:16px'>⚠️ Esta es una vista preliminar de lo que ya está cargado en el sistema. <b>No reemplaza al boletín oficial</b> que se entrega en la escuela.</div>" +
+    "<div id='fcTabla'>Cargando...</div>";
+  callBackendFamilia("getCalificacionesFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(res) {
+    if (!res.ok) { document.getElementById("fcTabla").innerHTML = "<p>❌ " + res.error + "</p>"; return; }
+    if (res.data.length === 0) { document.getElementById("fcTabla").innerHTML = "<p>Todavía no hay notas cargadas.</p>"; return; }
+    var html = "<table class='data-table'><thead><tr><th>Materia</th><th>Período</th><th>Nota</th></tr></thead><tbody>";
+    res.data.forEach(function(n) {
+      html += "<tr><td>" + (n.materia || "-") + "</td><td>" + (n.periodo || n.trimestre || "-") + "</td><td>" + (n.nota || n.calificacion || "-") + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    document.getElementById("fcTabla").innerHTML = html;
+  });
+}
+
+function renderFamiliaMensajes() {
+  var c = document.getElementById("familiaContent");
+  c.innerHTML = "<h2>✉️ Mensajes</h2><div id='fmLista'>Cargando...</div>";
+  callBackendFamilia("getMensajesFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(res) {
+    if (!res.ok) { document.getElementById("fmLista").innerHTML = "<p>❌ " + res.error + "</p>"; return; }
+    if (res.data.length === 0) { document.getElementById("fmLista").innerHTML = "<p>No hay mensajes.</p>"; return; }
+    var html = res.data.map(function(m) {
+      return "<div style='border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px'>" +
+        "<div style='font-size:12px;color:var(--text-light)'>" + (m.timestamp || "").split("T")[0] + "</div>" +
+        "<div style='margin-top:6px'>" + (m.mensaje || m.texto || "") + "</div></div>";
+    }).join("");
+    document.getElementById("fmLista").innerHTML = html;
+  });
+}
+
+function renderFamiliaReuniones() {
+  var c = document.getElementById("familiaContent");
+  c.innerHTML = "<h2>🤝 Reuniones de Padres</h2><div id='frLista'>Cargando...</div>";
+  callBackendFamilia("getReunionesFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(res) {
+    if (!res.ok) { document.getElementById("frLista").innerHTML = "<p>❌ " + res.error + "</p>"; return; }
+    if (res.data.length === 0) { document.getElementById("frLista").innerHTML = "<p>No hay reuniones citadas.</p>"; return; }
+    var html = res.data.map(function(r) {
+      return "<div style='border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px'>" +
+        "<div><b>" + r.fecha + (r.hora ? " · " + r.hora : "") + "</b></div>" +
+        "<div style='font-size:13px;margin-top:4px'>Citado por: " + (r.citado_por || "-") + "</div>" +
+        "<div style='font-size:13px;margin-top:4px'>Motivo: " + (r.motivo || "-") + "</div>" +
+        (r.confirmado
+          ? "<div style='margin-top:8px;color:var(--success)'>✅ Asistencia confirmada</div>"
+          : "<button class='btn btn-primary' style='margin-top:8px' onclick='familiaConfirmarReunion(\"" + r.id_reunion + "\")'>Confirmar asistencia</button>") +
+      "</div>";
+    }).join("");
+    document.getElementById("frLista").innerHTML = html;
+  });
+}
+
+function familiaConfirmarReunion(idReunion) {
+  callBackendFamilia("confirmarAsistenciaReunionFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave, id_reunion: idReunion}, function(res) {
+    if (res.ok) { toast("✅ Asistencia confirmada"); renderFamiliaReuniones(); }
+    else toast("❌ " + res.error);
+  });
+}
+
+function familiaCambiarClaveModal() {
+  var actual = prompt("Ingresá tu clave actual:");
+  if (!actual) return;
+  var nueva = prompt("Ingresá tu nueva clave (mínimo 4 caracteres):");
+  if (!nueva || nueva.length < 4) { toast("❌ Clave inválida"); return; }
+  callBackendFamilia("cambiarClaveFamilia", {dni: FAMILIA.dni, clave_actual: actual, clave_nueva: nueva}, function(res) {
+    if (!res.ok) { toast("❌ " + res.error); return; }
+    FAMILIA.clave = nueva;
+    toast("✅ Clave actualizada");
   });
 }
 
@@ -1637,9 +1884,25 @@ function verAlumno(al) {
       {label:"📄 Ver boletín", cls:"btn-primary", fn:'verBoletin("'+al.id_alumno+'")'},
       {label:"🩹 Acta accidente", cls:"btn-outline", fn:'abrirActaAccidente("'+al.id_alumno+'")'},
       {label:"✏️ Editar", cls:"btn-outline", fn:'abrirModalEditarAlumno('+JSON.stringify(al).replace(/'/g,"&#39;")+')', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)},
+      {label:"🔑 Restablecer clave portal", cls:"btn-outline", fn:'resetClavePortalAlumno("'+al.id_alumno+'","'+(al.apellido+', '+al.nombre).replace(/'/g,"&#39;")+'")', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)},
       {label:"🚫 Dar de baja", cls:"btn-danger", fn:'confirmarDarDeBajaAlumno("'+al.id_alumno+'","'+(al.apellido+', '+al.nombre).replace(/'/g,"&#39;")+'")', show: ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol)}
     ]
   );
+}
+
+function resetClavePortalAlumno(idAlumno, nombre) {
+  if (!confirm("¿Restablecer la clave del Portal Familias de " + nombre + "?\n\nSe va a generar una clave nueva que vas a tener que entregarle a la familia en persona (no se envía ningún mail).")) return;
+  callBackend("resetClavePortalFamilia", {id_alumno: idAlumno}, function(res) {
+    if (!res.ok) { toast("❌ " + res.error); return; }
+    abrirModal("🔑 Clave nueva generada",
+      `<div class="alert alert-info" style="margin-bottom:14px">Comunicale estos datos a la familia (por WhatsApp, teléfono, o en persona). Después de este mensaje, la clave <b>no se vuelve a mostrar</b>.</div>
+       <div style="font-size:15px;text-align:center;padding:16px;background:#f5f8ff;border-radius:8px">
+         <div><b>Usuario (DNI):</b> ${res.data.dni}</div>
+         <div style="margin-top:8px"><b>Clave:</b> <span style="font-size:22px;font-weight:700;color:var(--primary);letter-spacing:2px">${res.data.clave_nueva}</span></div>
+       </div>`,
+      [{label:"Listo", cls:"btn-primary", fn:'cerrarModal()'}]
+    );
+  });
 }
 
 function confirmarDarDeBajaAlumno(idAlumno, nombre) {
