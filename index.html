@@ -556,19 +556,25 @@ function iniciarPortalFamilia() {
   el.innerHTML =
     '<div class="layout">' +
       '<aside class="sidebar">' +
-        '<div class="sidebar-header"><h2 style="color:#fff;font-size:16px">👨‍👩‍👧 Portal Familias</h2>' +
-          '<div style="color:#ffffffaa;font-size:12px;margin-top:6px">' + FAMILIA.nombre + ' ' + FAMILIA.apellido + '<br>' + FAMILIA.grado + '° ' + FAMILIA.seccion + '</div></div>' +
+        '<div class="sidebar-header"><div class="school" style="font-size:16px">👨‍👩‍👧 Portal Familias</div>' +
+          '<div class="user-info">' + FAMILIA.nombre + ' ' + FAMILIA.apellido + '<br>' + FAMILIA.grado + '° ' + FAMILIA.seccion + '</div></div>' +
         '<nav class="sidebar-nav">' +
-          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaAsistencia()">📋 Asistencia</a>' +
-          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaCalificaciones()">📝 Notas (vista preliminar)</a>' +
-          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaMensajes()">✉️ Mensajes</a>' +
-          '<a href="#" class="nav-item" onclick="event.preventDefault();renderFamiliaReuniones()">🤝 Reuniones de Padres</a>' +
-          '<a href="#" class="nav-item" onclick="event.preventDefault();familiaCambiarClaveModal()">🔑 Cambiar mi clave</a>' +
+          '<div class="nav-item" onclick="renderFamiliaAsistencia()">📋 Asistencia</div>' +
+          '<div class="nav-item" onclick="renderFamiliaCalificaciones()">📝 Notas (vista preliminar)</div>' +
+          '<div class="nav-item" onclick="renderFamiliaMensajes()">✉️ Mensajes</div>' +
+          '<div class="nav-item" onclick="renderFamiliaReuniones()">🤝 Reuniones de Padres</div>' +
+          '<div class="nav-item" onclick="familiaDescargarInforme()">📥 Descargar informe</div>' +
+          '<div class="nav-item" onclick="familiaCambiarClaveModal()">🔑 Cambiar mi clave</div>' +
         '</nav>' +
-        '<button class="btn btn-outline" style="margin:16px;width:calc(100% - 32px)" onclick="familiaLogout()">← Cerrar sesión</button>' +
+        '<div class="sidebar-footer"><button class="btn-logout" onclick="familiaLogout()">⬅ Cerrar sesión</button></div>' +
       '</aside>' +
-      '<main class="main-content"><div id="familiaContent" style="padding:24px"></div></main>' +
+      '<div class="main"><div class="page-content" id="familiaContent"></div></div>' +
     '</div>';
+  if (!APP.config || Object.keys(APP.config).length === 0) {
+    callBackendFamilia("getConfig", {}, function(res) {
+      if (res.ok) APP.config = res.data;
+    });
+  }
   renderFamiliaAsistencia();
 }
 
@@ -668,6 +674,105 @@ function familiaCambiarClaveModal() {
     FAMILIA.clave = nueva;
     toast("✅ Clave actualizada");
   });
+}
+
+function familiaDescargarInforme() {
+  toast("Generando informe...");
+  callBackendFamilia("getAsistenciaFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(resA) {
+    if (!resA.ok) { toast("❌ " + resA.error); return; }
+    callBackendFamilia("getCalificacionesFamilia", {dni: FAMILIA.dni, clave: FAMILIA.clave}, function(resC) {
+      if (!resC.ok) { toast("❌ " + resC.error); return; }
+      generarInformeFamiliaPDF(resA.data, resC.data);
+    });
+  });
+}
+
+function generarInformeFamiliaPDF(asistencia, calificaciones) {
+  var esc  = (APP.config && APP.config.NOMBRE_ESCUELA) || "Escuela Primaria";
+  var cue  = (APP.config && APP.config.CUE) || "";
+  var dist = (APP.config && APP.config.DISTRITO) || "";
+  var dom  = (APP.config && APP.config.DOMICILIO_ESCUELA) || "";
+
+  var hoy = new Date();
+  var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var hoyStr = hoy.getDate() + " de " + meses[hoy.getMonth()] + " de " + hoy.getFullYear();
+
+  asistencia = asistencia.slice().sort(function(a, b) { return String(a.fecha||"").localeCompare(String(b.fecha||"")); });
+
+  var totalDias = asistencia.length;
+  var presentes = asistencia.filter(function(a){ return a.estado === "P"; }).length;
+  var ausentes  = asistencia.filter(function(a){ return a.estado === "A"; }).length;
+  var tardes    = asistencia.filter(function(a){ return a.estado === "T"; }).length;
+
+  var filasAsistencia = asistencia.map(function(a) {
+    var estadoTxt = a.estado === "P" ? "Presente" : a.estado === "A" ? "Ausente" : a.estado === "T" ? "Tarde" : a.estado;
+    return "<tr><td>" + a.fecha + "</td><td>" + estadoTxt + "</td><td>" + (a.observacion || "-") + "</td></tr>";
+  }).join("");
+
+  var filasNotas = calificaciones.map(function(n) {
+    return "<tr><td>" + (n.materia || "-") + "</td><td>" + (n.periodo || n.trimestre || "-") + "</td><td>" + (n.nota || n.calificacion || "-") + "</td></tr>";
+  }).join("");
+
+  var html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Informe - " + FAMILIA.nombre + "</title>" +
+    "<style>" +
+      "*{box-sizing:border-box;margin:0;padding:0}" +
+      "body{font-family:Arial,sans-serif;font-size:13px;color:#000;padding:32px 40px;max-width:800px;margin:0 auto}" +
+      ".cabecera{text-align:center;border-bottom:2px solid #B71C1C;padding-bottom:12px;margin-bottom:20px}" +
+      ".escuela{font-size:18px;font-weight:bold;color:#B71C1C;margin-bottom:4px}" +
+      ".meta{font-size:11px;color:#555}" +
+      ".fecha-emision{text-align:right;font-size:12px;margin-bottom:20px;color:#555}" +
+      ".titulo{text-align:center;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;color:#212121}" +
+      ".datos-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:13px;background:#fafafa;border:1px solid #eee;border-radius:6px;padding:12px 16px;margin-bottom:20px}" +
+      "h2{font-size:14px;color:#B71C1C;margin:24px 0 10px}" +
+      "table{width:100%;border-collapse:collapse;font-size:12px}" +
+      "th{background:#f5f5f5;text-align:left;padding:6px 8px;border-bottom:2px solid #ddd}" +
+      "td{padding:6px 8px;border-bottom:1px solid #eee}" +
+      ".resumen{display:flex;gap:16px;margin:10px 0 6px;font-size:12px}" +
+      ".resumen div{background:#f5f8ff;border-radius:6px;padding:8px 14px;text-align:center}" +
+      ".resumen b{display:block;font-size:18px;color:#B71C1C}" +
+      ".aviso{font-size:11px;color:#777;font-style:italic;margin-top:6px}" +
+      ".no-print{text-align:center;margin:24px 0}" +
+      ".btn-imp{padding:10px 24px;background:#B71C1C;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}" +
+      "@media print{.no-print{display:none}}" +
+    "</style></head><body>" +
+
+    "<div class='cabecera'>" +
+      "<div class='escuela'>" + esc + "</div>" +
+      "<div class='meta'>" + (cue?"CUE: "+cue+" &nbsp;|&nbsp; ":"") + (dist?"Distrito: "+dist+" &nbsp;|&nbsp; ":"") + (dom?dom:"") + "</div>" +
+    "</div>" +
+
+    "<div class='fecha-emision'>" + esc + ", " + hoyStr + "</div>" +
+    "<div class='titulo'>Informe de alumno/a</div>" +
+
+    "<div class='datos-grid'>" +
+      "<div><b>Alumno/a:</b> " + FAMILIA.nombre + " " + FAMILIA.apellido + "</div>" +
+      "<div><b>Grado y sección:</b> " + FAMILIA.grado + "° " + FAMILIA.seccion + "</div>" +
+      "<div><b>Ciclo lectivo:</b> " + (APP.cicloLectivo || "-") + "</div>" +
+    "</div>" +
+
+    "<h2>Asistencia</h2>" +
+    "<div class='resumen'>" +
+      "<div><b>" + totalDias + "</b>Días registrados</div>" +
+      "<div><b>" + presentes + "</b>Presentes</div>" +
+      "<div><b>" + ausentes + "</b>Ausentes</div>" +
+      "<div><b>" + tardes + "</b>Llegadas tarde</div>" +
+    "</div>" +
+    (filasAsistencia
+      ? "<table><thead><tr><th>Fecha</th><th>Estado</th><th>Observación</th></tr></thead><tbody>" + filasAsistencia + "</tbody></table>"
+      : "<p style='color:#888;font-size:12px'>Sin registros de asistencia.</p>") +
+
+    "<h2>Notas / Calificaciones</h2>" +
+    "<div class='aviso'>Vista preliminar de lo cargado en el sistema hasta el momento. No reemplaza al boletín oficial que entrega la escuela.</div>" +
+    (filasNotas
+      ? "<table style='margin-top:8px'><thead><tr><th>Materia</th><th>Período</th><th>Nota</th></tr></thead><tbody>" + filasNotas + "</tbody></table>"
+      : "<p style='color:#888;font-size:12px;margin-top:8px'>Sin notas cargadas todavía.</p>") +
+
+    "<div class='no-print'><button class='btn-imp' onclick='window.print()'>🖨️ Imprimir / Guardar PDF</button></div>" +
+    "</body></html>";
+
+  var win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
