@@ -1920,7 +1920,11 @@ function guardarSeguimiento(idAlumno, categoria) {
   if (!texto) { toast("❌ Escribí la novedad antes de guardar"); return; }
   callBackend("agregarSeguimiento", {id_alumno: idAlumno, categoria: categoria, texto: texto}, function(res) {
     if (res.ok) {
-      toast("✅ Seguimiento guardado, se avisó a dirección");
+      if (res.data.aviso) {
+        toast("⚠️ Se guardó, pero: " + res.data.aviso);
+      } else {
+        toast("✅ Seguimiento guardado, se avisó a dirección");
+      }
       cerrarModal();
       cargarSeguimientos();
     } else {
