@@ -822,6 +822,7 @@ function construirMenu() {
     {id:"asistencia", icon:"📋", label:"Asistencia", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
     {id:"calificaciones", icon:"📝", label:"Calificaciones", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
     {id:"alumnos", icon:"👨‍🎓", label:"Alumnos", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
+    {id:"seguimientos", icon:"🎯", label:"Seguimientos", roles:["director","vicedirector","secretario","maestro","eoe","representante_legal"]},
     {section:"Informes", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
     {id:"boletin", icon:"📄", label:"Boletines", roles:["director","vicedirector","secretario","maestro","representante_legal"]},
     {id:"horarios", icon:"🗓️", label:"Horarios", roles:["director","vicedirector","secretario","representante_legal"]},
@@ -866,7 +867,7 @@ function navegarA(pagina) {
 
   var titulos = {
     dashboard:"Dashboard", asistencia:"Asistencia", calificaciones:"Calificaciones",
-    alumnos:"Alumnos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes",
+    alumnos:"Alumnos", seguimientos:"Seguimientos", boletin:"Boletines", horarios:"Horarios", reportes:"Reportes",
     ausencias_docentes:"Ausencias Docentes", reuniones:"Reuniones de Padres",
     legajos:"Legajos EOE", mensajes:"Mensajes", usuarios:"Usuarios",
     cierreciclo:"Cierre de Ciclo", configuracion:"Configuración"
@@ -878,6 +879,7 @@ function navegarA(pagina) {
     asistencia: renderAsistencia,
     calificaciones: renderCalificaciones,
     alumnos: renderAlumnos,
+    seguimientos: renderSeguimientos,
     boletin: renderBoletin,
     horarios: renderHorarios,
     reportes: renderReportes,
@@ -1804,6 +1806,129 @@ function confirmarReactivarAlumno(idAlumno, nombre) {
     else toast("❌ " + res.error);
   });
 }
+
+// ════════════════════════════════════════════════════════════
+// SEGUIMIENTOS (por alumno / categoría)
+// ════════════════════════════════════════════════════════════
+var SEGUIMIENTO_CATEGORIAS = ["Inasistencias", "Académico", "Conducta", "Otras situaciones"];
+var SEGUIMIENTO_ICONOS = {"Inasistencias":"📋","Académico":"📝","Conducta":"⚠️","Otras situaciones":"📌"};
+var SEGUIMIENTO_TEMPLATES = {
+  "Inasistencias": "El/la alumno/a registra inasistencias que ameritan seguimiento. Se solicita a la familia informar el motivo y regularizar la asistencia.",
+  "Académico": "Se registra una situación académica a seguimiento. Se recomienda reforzar el trabajo en el/los área/s correspondientes.",
+  "Conducta": "Se registra una situación de conducta que requiere seguimiento y acompañamiento.",
+  "Otras situaciones": "Se registra una situación particular del alumno/a que amerita seguimiento."
+};
+
+function renderSeguimientos() {
+  var pc = document.getElementById("pageContent");
+  var esAdminRol = ["director","vicedirector","secretario","representante_legal"].includes(APP.usuario.rol);
+
+  var filtrosHtml = "";
+  if (esAdminRol) {
+    filtrosHtml =
+      '<div style="display:flex;gap:10px;margin-bottom:16px">' +
+        '<select id="segGrado" class="form-control" style="width:120px" onchange="cargarSeguimientos()">' +
+          '<option value="">Todos los grados</option>' +
+          [1,2,3,4,5,6].map(function(g){return '<option value="'+g+'">'+g+'°</option>';}).join('') +
+        '</select>' +
+        '<select id="segSeccion" class="form-control" style="width:120px" onchange="cargarSeguimientos()">' +
+          '<option value="">Todas</option><option value="A">A</option><option value="B">B</option>' +
+        '</select>' +
+      '</div>';
+  }
+
+  pc.innerHTML =
+    '<div class="card"><div class="card-title">🎯 Seguimientos por alumno</div>' +
+    '<div style="font-size:12px;color:var(--text-light);margin-bottom:14px">Cada categoría es un seguimiento continuo: la primera novedad usa un mensaje predeterminado (editable) y las siguientes se van sumando al mismo hilo. Todo queda respaldado en un documento de Drive por alumno, y se le avisa por mail a dirección en cada novedad.</div>' +
+    filtrosHtml +
+    '<div id="segAlumnosBody">Cargando...</div></div>';
+
+  cargarSeguimientos();
+}
+
+function cargarSeguimientos() {
+  var params = {};
+  var elG = document.getElementById("segGrado");
+  var elS = document.getElementById("segSeccion");
+  if (elG) params.grado = elG.value;
+  if (elS) params.seccion = elS.value;
+  if (APP.usuario.rol === "maestro") { params.grado = String(APP.usuario.grado); params.seccion = APP.usuario.seccion; }
+
+  callBackend("getAlumnos", params, function(resAl) {
+    if (!resAl.ok) { document.getElementById("segAlumnosBody").innerHTML = "<p>Error al cargar alumnos</p>"; return; }
+    callBackend("getSeguimientos", params, function(resSeg) {
+      var activos = {};
+      if (resSeg.ok) {
+        resSeg.data.forEach(function(s) {
+          if (s.estado === "Activo") activos[s.id_alumno + "|" + s.categoria] = s;
+        });
+      }
+      pintarListaSeguimientos(resAl.data, activos);
+    });
+  });
+}
+
+function pintarListaSeguimientos(alumnos, activos) {
+  if (alumnos.length === 0) {
+    document.getElementById("segAlumnosBody").innerHTML = "<p style='color:var(--text-light)'>No hay alumnos para mostrar.</p>";
+    return;
+  }
+  alumnos.sort(function(a,b){ return (a.apellido+a.nombre).localeCompare(b.apellido+b.nombre); });
+  var html = alumnos.map(function(al) {
+    var pills = SEGUIMIENTO_CATEGORIAS.map(function(cat) {
+      var activo = activos[al.id_alumno + "|" + cat];
+      var estilo = activo
+        ? "background:#FFF3E0;border:1px solid #FB8C00;color:#E65100"
+        : "background:#f5f5f5;border:1px solid var(--border);color:var(--text-light)";
+      return '<span onclick=\'abrirModalSeguimiento("'+al.id_alumno+'","'+(al.apellido+', '+al.nombre).replace(/'/g,"&#39;")+'","'+cat+'")\' style="cursor:pointer;font-size:11px;padding:3px 9px;border-radius:12px;'+estilo+'">'+SEGUIMIENTO_ICONOS[cat]+' '+cat+(activo?' ●':'')+'</span>';
+    }).join(" ");
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+      + '<div><b>'+al.apellido+', '+al.nombre+'</b> <span style="color:var(--text-light);font-size:12px">'+al.grado+'° '+al.seccion+'</span></div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap">'+pills+'</div>'
+      + '</div>';
+  }).join("");
+  document.getElementById("segAlumnosBody").innerHTML = html;
+}
+
+function abrirModalSeguimiento(idAlumno, nombre, categoria) {
+  abrirModal(SEGUIMIENTO_ICONOS[categoria] + " " + categoria + " — " + nombre,
+    '<div id="segHistorial" style="max-height:260px;overflow-y:auto;margin-bottom:14px">Cargando historial...</div>' +
+    '<div class="form-group"><label class="form-label">Nueva novedad</label>' +
+    '<textarea id="segTexto" class="form-control" rows="4"></textarea></div>' +
+    '<div style="text-align:right"><button class="btn btn-primary" onclick=\'guardarSeguimiento("'+idAlumno+'","'+categoria+'")\'>💾 Guardar</button></div>',
+    []
+  );
+  callBackend("getHistorialSeguimiento", {id_alumno: idAlumno, categoria: categoria}, function(res) {
+    var cont = document.getElementById("segHistorial");
+    var textoInicial = document.getElementById("segTexto");
+    if (!res.ok || res.data.length === 0) {
+      cont.innerHTML = '<p style="color:var(--text-light);font-size:13px">Todavía no hay seguimiento en esta categoría. Se va a abrir uno nuevo.</p>';
+      if (textoInicial) textoInicial.value = SEGUIMIENTO_TEMPLATES[categoria] || "";
+      return;
+    }
+    var hist = res.data.slice().sort(function(a,b){ return String(b.fecha_creacion||"").localeCompare(String(a.fecha_creacion||"")); });
+    cont.innerHTML = hist.map(function(h) {
+      return '<div style="border-left:3px solid var(--primary);padding:6px 10px;margin-bottom:8px;background:#f9f9f9;border-radius:0 6px 6px 0">'
+        + '<div style="font-size:11px;color:var(--text-light)">'+h.fecha+' · '+h.autor+'</div>'
+        + '<div style="font-size:13px;margin-top:2px">'+h.texto+'</div></div>';
+    }).join("");
+  });
+}
+
+function guardarSeguimiento(idAlumno, categoria) {
+  var texto = document.getElementById("segTexto").value.trim();
+  if (!texto) { toast("❌ Escribí la novedad antes de guardar"); return; }
+  callBackend("agregarSeguimiento", {id_alumno: idAlumno, categoria: categoria, texto: texto}, function(res) {
+    if (res.ok) {
+      toast("✅ Seguimiento guardado, se avisó a dirección");
+      cerrarModal();
+      cargarSeguimientos();
+    } else {
+      toast("❌ " + res.error);
+    }
+  });
+}
+
 
 // ════════════════════════════════════════════════════════════
 // CIERRE DE CICLO LECTIVO
@@ -4800,6 +4925,15 @@ function renderConfiguracion() {
         <button class="btn btn-primary" onclick="guardarFirmaConfig()">💾 Guardar firma y datos</button>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🛠️ Mantenimiento del Spreadsheet</div>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:14px">
+      Revisa que existan todas las hojas y columnas que usa la app (Docentes, Cursos, Horario_Detalle, Seguimientos, y las columnas nuevas en Alumnos/Historial_Legajos/Reuniones_Padres). Si falta algo, lo crea automáticamente. No borra ni modifica datos existentes.
+    </p>
+    <button class="btn btn-outline" onclick="ejecutarInitSheets()">🔧 Verificar y crear hojas/columnas necesarias</button>
+    <div id="initSheetsResultado" style="margin-top:12px"></div>
   </div>`;
   // Mostrar firma ya guardada si existe
   setTimeout(mostrarFirmaEnConfig, 50);
@@ -4887,6 +5021,25 @@ function inicializarFirmaGuardada() {
     if (res.ok && res.data && res.data.firma) {
       APP.firmaBase64 = res.data.firma;
     }
+  });
+}
+
+function ejecutarInitSheets() {
+  var cont = document.getElementById("initSheetsResultado");
+  cont.innerHTML = "Revisando...";
+  callBackend("initSheets", {}, function(res) {
+    if (!res.ok) { cont.innerHTML = "<div class='alert alert-warning'>\u274c " + res.error + "</div>"; return; }
+    var d = res.data;
+    if (d.hojas_creadas.length === 0 && d.columnas_agregadas.length === 0) {
+      cont.innerHTML = "<div class='alert alert-info'>\u2705 Ya estaba todo al d\u00eda, no hizo falta crear nada.</div>";
+      return;
+    }
+    var html = "<div class='alert alert-info'>";
+    if (d.hojas_creadas.length > 0) html += "<b>Hojas creadas:</b> " + d.hojas_creadas.join(", ") + "<br>";
+    if (d.columnas_agregadas.length > 0) html += "<b>Columnas agregadas:</b> " + d.columnas_agregadas.join(", ");
+    html += "</div>";
+    cont.innerHTML = html;
+    toast("\u2705 Listo");
   });
 }
 
