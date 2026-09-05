@@ -1955,55 +1955,75 @@ function toggleDictado(textareaId) {
   if (!Rec) { toast("❌ Tu navegador no soporta dictado por voz."); return; }
 
   if (DICTADO_ACTIVO[textareaId]) {
+    // El usuario tocó "Detener": avisamos que fue algo manual para
+    // que el ciclo de reinicio automático de abajo no la vuelva a prender.
+    DICTADO_ACTIVO[textareaId]._detenidoManual = true;
     DICTADO_ACTIVO[textareaId].stop();
     return;
   }
 
-  var recognition = new Rec();
-  recognition.lang = "es-AR";
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
   var textarea = document.getElementById(textareaId);
   var btn = document.getElementById("dictarBtn_" + textareaId);
   var badge = document.getElementById("dictarEstado_" + textareaId);
-  var baseTexto = textarea.value ? textarea.value.trim() + " " : "";
 
-  recognition.onstart = function() {
-    if (btn) { btn.textContent = "⏹️ Detener"; btn.style.background = "#FFEBEE"; btn.style.borderColor = "#E53935"; btn.style.color = "#E53935"; }
-    if (badge) badge.textContent = "🔴 Escuchando...";
-  };
+  // Todo lo ya confirmado (de frases anteriores + lo que ya tenía el cuadro)
+  var textoConfirmado = textarea.value ? textarea.value.trim() : "";
 
-  recognition.onresult = function(event) {
-    var final = "", interim = "";
-    for (var i = event.resultIndex; i < event.results.length; i++) {
-      var t = event.results[i][0].transcript;
-      if (event.results[i].isFinal) final += t + " ";
-      else interim += t;
-    }
-    if (final) {
-      baseTexto = procesarPuntuacionDictado(baseTexto + final) + " ";
-      textarea.value = baseTexto;
-    } else {
-      textarea.value = baseTexto + interim;
-    }
-  };
+  function iniciarUnaEscucha() {
+    var recognition = new Rec();
+    recognition.lang = "es-AR";
+    // OJO: a propósito NO se usa continuous:true. En Safari/iPhone el modo
+    // continuo reenvía a veces TODO lo dicho desde el principio en cada
+    // evento (no solo lo nuevo), lo que duplicaba el texto sin parar.
+    // Por eso escuchamos "una frase" a la vez y, al terminar esa frase,
+    // reiniciamos la escucha automáticamente para que no se note el corte.
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
-  recognition.onerror = function(event) {
-    if (badge) badge.textContent = event.error === "not-allowed"
-      ? "⚠️ Permiso de micrófono denegado"
-      : "⚠️ Error: " + event.error;
-  };
+    recognition.onstart = function() {
+      if (btn) { btn.textContent = "⏹️ Detener"; btn.style.background = "#FFEBEE"; btn.style.borderColor = "#E53935"; btn.style.color = "#E53935"; }
+      if (badge) badge.textContent = "🔴 Escuchando...";
+    };
 
-  recognition.onend = function() {
-    if (btn) { btn.textContent = "🎤 Dictar"; btn.style.background = ""; btn.style.borderColor = ""; btn.style.color = ""; }
-    if (badge) badge.textContent = "";
-    delete DICTADO_ACTIVO[textareaId];
-    textarea.value = textarea.value.trim();
-  };
+    recognition.onresult = function(event) {
+      // Como continuous=false, este evento trae únicamente lo dicho en
+      // ESTA frase (no arrastra frases anteriores), así que no hay riesgo
+      // de duplicar nada.
+      var textoFrase = "";
+      for (var i = 0; i < event.results.length; i++) {
+        textoFrase += event.results[i][0].transcript;
+      }
+      var vistaPrevia = procesarPuntuacionDictado((textoConfirmado + " " + textoFrase).trim());
+      textarea.value = vistaPrevia;
+    };
 
-  DICTADO_ACTIVO[textareaId] = recognition;
-  recognition.start();
+    recognition.onerror = function(event) {
+      if (event.error === "no-speech") return; // silencio, no es un error real
+      if (badge) badge.textContent = event.error === "not-allowed"
+        ? "⚠️ Permiso de micrófono denegado"
+        : "⚠️ Error: " + event.error;
+    };
+
+    recognition.onend = function() {
+      // Confirmar lo que quedó escrito como base para la próxima frase
+      textoConfirmado = textarea.value.trim();
+
+      if (recognition._detenidoManual) {
+        if (btn) { btn.textContent = "🎤 Dictar"; btn.style.background = ""; btn.style.borderColor = ""; btn.style.color = ""; }
+        if (badge) badge.textContent = "";
+        delete DICTADO_ACTIVO[textareaId];
+        textarea.value = textarea.value.trim();
+        return;
+      }
+      // Seguir escuchando automáticamente (siguiente frase)
+      iniciarUnaEscucha();
+    };
+
+    DICTADO_ACTIVO[textareaId] = recognition;
+    recognition.start();
+  }
+
+  iniciarUnaEscucha();
 }
 
 function abrirModalSeguimiento(idAlumno, nombre, categoria) {
