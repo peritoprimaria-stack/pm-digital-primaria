@@ -2954,7 +2954,7 @@ function verLegajo(id) {
           <select id="hTipo" class="form-control">
             <option>Entrevista familiar</option><option>Entrevista al alumno</option>
             <option>Reunión interdisciplinaria</option><option>Seguimiento pedagógico</option>
-            <option>Derivación</option><option>Otro</option>
+            <option>Derivación</option><option>Observaciones</option><option>Otro</option>
           </select></div>
         <div class="form-group"><label class="form-label">Descripción</label>
           <textarea id="hDesc" class="form-control" rows="3" placeholder="Describí la intervención..."></textarea></div>`,
@@ -3162,7 +3162,7 @@ function editarEntradaHistorial(idEntrada, idLegajo, idAlumno) {
         '<input id="ehFecha" type="date" class="form-control" value="'+h.fecha+'"></div>' +
       '<div class="form-group"><label class="form-label">Tipo de intervención</label>' +
         '<select id="ehTipo" class="form-control">' +
-          ['Entrevista familiar','Entrevista al alumno','Reunión interdisciplinaria','Seguimiento pedagógico','Derivación','Otro'].map(function(t){
+          ['Entrevista familiar','Entrevista al alumno','Reunión interdisciplinaria','Seguimiento pedagógico','Derivación','Observaciones','Otro'].map(function(t){
             return '<option'+(t===h.tipo_intervencion?' selected':'')+'>'+t+'</option>';
           }).join('') +
         '</select></div>' +
