@@ -2931,6 +2931,8 @@ function verLegajo(id) {
           }).join("")
         : '<p style="color:var(--text-light);font-size:13px">Sin entradas en el historial.</p>';
 
+      callBackend("getArchivosLegajo", {id_legajo: id}, function(resA) {
+      var archivosHtml = construirSeccionArchivosLegajo(id, resA.ok ? resA.data : []);
       abrirModal("📂 Legajo — " + l.apellido_nombre,
         `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
           <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick='exportarLegajoAlumnoPDF("${l.id_alumno}","${l.apellido_nombre.replace(/"/g,"&quot;")}")'>📄 Exportar todo (PDF)</button>
@@ -2948,6 +2950,7 @@ function verLegajo(id) {
         ${l.observaciones ? '<div class="alert alert-info" style="margin-bottom:12px">'+l.observaciones+'</div>' : ''}
         <h4 style="color:var(--primary);margin-bottom:8px">Historial de intervenciones</h4>
         ${histHtml}
+        ${archivosHtml}
         <hr style="margin:12px 0">
         <h4 style="color:var(--primary);margin-bottom:8px">+ Nueva entrada</h4>
         <div class="form-group"><label class="form-label">Tipo de intervención</label>
@@ -2960,7 +2963,138 @@ function verLegajo(id) {
           <textarea id="hDesc" class="form-control" rows="3" placeholder="Describí la intervención..."></textarea></div>`,
         [{label:"💾 Agregar entrada", cls:"btn-primary", fn:'agregarEntradaHistorial("'+id+'","'+l.id_alumno+'")'}]
       );
+      });
     });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ARCHIVOS ADJUNTOS DE LEGAJO (PDF / Word)
+// ════════════════════════════════════════════════════════════
+var ARCHIVOS_LEGAJO_CACHE = {};
+var ARCHIVOS_LEGAJO_MAX_MB = 6;
+
+function _escHtml(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function construirSeccionArchivosLegajo(idLegajo, archivos) {
+  var filas = archivos.length > 0
+    ? archivos.map(function(a) {
+        ARCHIVOS_LEGAJO_CACHE[a.id_archivo] = a;
+        var icono = a.mime === "application/pdf" ? "📕" : "📘";
+        var kb = Number(a.tamano_kb) || 0;
+        var peso = kb >= 1024 ? (kb / 1024).toFixed(1) + " MB" : kb + " KB";
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px">'
+          + '<div style="min-width:0">'
+            + '<div style="font-size:13px;font-weight:600;overflow-wrap:anywhere">' + icono + ' ' + _escHtml(a.nombre_archivo) + '</div>'
+            + '<div style="font-size:11px;color:var(--text-light)">' + _escHtml(a.fecha) + ' · ' + _escHtml(a.subido_por) + ' · ' + peso + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">'
+            + '<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="abrirArchivoLegajo(\'' + a.id_archivo + '\')">Abrir</button>'
+            + '<button style="border:none;background:none;cursor:pointer;font-size:13px" title="Quitar del legajo" onclick="quitarArchivoLegajo(\'' + a.id_archivo + '\',\'' + idLegajo + '\')">🗑️</button>'
+          + '</div>'
+        + '</div>';
+      }).join("")
+    : '<p style="color:var(--text-light);font-size:13px">Todavía no hay documentos adjuntos.</p>';
+
+  return '<h4 style="color:var(--primary);margin:14px 0 8px">Documentos adjuntos</h4>'
+    + filas
+    + '<div style="margin-top:8px">'
+      + '<input type="file" id="archivoLegajoInput" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="subirArchivoLegajo(\'' + idLegajo + '\')">'
+      + '<button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="document.getElementById(\'archivoLegajoInput\').click()">📎 Adjuntar PDF o Word</button>'
+      + ' <span id="archivoLegajoEstado" style="font-size:11px;color:var(--text-light);margin-left:6px">Hasta ' + ARCHIVOS_LEGAJO_MAX_MB + ' MB por archivo</span>'
+    + '</div>';
+}
+
+// El archivo no entra en la URL de un GET, así que va por POST.
+function callBackendPost(accion, data, callback) {
+  var token = APP.usuario ? APP.usuario.email : "";
+  var payload = Object.assign({}, data, {accion: accion, token: token});
+  fetch(BACKEND_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain;charset=utf-8"},
+    body: JSON.stringify(payload),
+    redirect: "follow"
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(json) { callback(json); })
+  .catch(function(err) {
+    callback({ok: false, error: "No se pudo enviar el archivo (" + err.message + "). Revisá la conexión y probá de nuevo."});
+  });
+}
+
+function subirArchivoLegajo(idLegajo) {
+  var input = document.getElementById("archivoLegajoInput");
+  var estado = document.getElementById("archivoLegajoEstado");
+  var file = input && input.files && input.files[0];
+  if (!file) return;
+
+  var ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (["pdf", "doc", "docx"].indexOf(ext) === -1) {
+    toast("❌ Solo se pueden adjuntar archivos PDF o Word (.pdf, .doc, .docx)");
+    input.value = "";
+    return;
+  }
+  if (file.size > ARCHIVOS_LEGAJO_MAX_MB * 1024 * 1024) {
+    toast("❌ El archivo pesa más de " + ARCHIVOS_LEGAJO_MAX_MB + " MB");
+    input.value = "";
+    return;
+  }
+
+  estado.textContent = "Subiendo " + file.name + "...";
+  var reader = new FileReader();
+  reader.onload = function() {
+    var base64 = String(reader.result).split(",")[1] || "";
+    callBackendPost("subirArchivoLegajo", {id_legajo: idLegajo, nombre_archivo: file.name, base64: base64}, function(res) {
+      if (res.ok) {
+        toast("✅ Archivo adjuntado");
+        verLegajo(idLegajo);
+      } else {
+        estado.textContent = "";
+        input.value = "";
+        toast("❌ " + res.error);
+      }
+    });
+  };
+  reader.onerror = function() {
+    estado.textContent = "";
+    toast("❌ No se pudo leer el archivo del dispositivo");
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirArchivoLegajo(idArchivo) {
+  var info = ARCHIVOS_LEGAJO_CACHE[idArchivo] || {};
+  // Los PDF se abren en pestaña nueva. La pestaña se abre ya mismo (en el
+  // toque) porque si se abre después de esperar al servidor, el navegador la bloquea.
+  var ventana = info.mime === "application/pdf" ? window.open("", "_blank") : null;
+  toast("Abriendo archivo...");
+  callBackend("getArchivoLegajo", {id_archivo: idArchivo}, function(res) {
+    if (!res.ok) { if (ventana) ventana.close(); toast("❌ " + res.error); return; }
+    var bin = atob(res.data.base64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([bytes], {type: res.data.mime}));
+    if (ventana) {
+      ventana.location.href = url;
+    } else {
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = res.data.nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(function() { URL.revokeObjectURL(url); }, 120000);
+  });
+}
+
+function quitarArchivoLegajo(idArchivo, idLegajo) {
+  if (!confirm("¿Quitar este archivo del legajo?\n\nDeja de verse en la app, pero queda guardado en Drive.")) return;
+  callBackendPost("eliminarArchivoLegajo", {id_archivo: idArchivo}, function(res) {
+    if (res.ok) { toast("Archivo quitado del legajo"); verLegajo(idLegajo); }
+    else toast("❌ " + res.error);
   });
 }
 
@@ -3015,7 +3149,7 @@ function toggleFavoritoIntervencion(idEntrada, idLegajo, idAlumno) {
 }
 
 function confirmarEliminarLegajo(idLegajo) {
-  if (!confirm("¿Eliminar este legajo y todo su historial? Esta acción no se puede deshacer.")) return;
+  if (!confirm("¿Eliminar este legajo y todo su historial? Esta acción no se puede deshacer.\n\nLos documentos adjuntos no se borran: quedan guardados en Drive.")) return;
   callBackend("eliminarLegajo", {id_legajo: idLegajo}, function(res) {
     if (res.ok) {
       cerrarModal();
