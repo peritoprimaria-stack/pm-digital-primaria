@@ -1444,10 +1444,12 @@ function guardarCalificacionesBloque() {
   document.getElementById("califStatus").textContent = "Guardando...";
   callBackend("guardarCalificacionesBloque", {calificaciones: califs}, function(res) {
     if (res.ok) {
-      toast("✅ " + res.data.guardadas + " calificaciones guardadas");
-      document.getElementById("califStatus").textContent = "✅ Guardado";
+      var nErr = (res.data.errores || []).length;
+      toast((nErr ? "⚠️ " : "✅ ") + res.data.guardadas + " calificaciones guardadas" + (nErr ? " (" + nErr + " con error)" : ""));
+      document.getElementById("califStatus").textContent = nErr ? "⚠️ Guardado con errores" : "✅ Guardado";
     } else {
       toast("❌ Error: " + res.error);
+      document.getElementById("califStatus").textContent = "❌ No se guardó";
     }
   });
 }
@@ -4403,6 +4405,34 @@ function mostrarHorario() {
 // ════════════════════════════════════════════════════════════
 // AUSENCIAS DOCENTES
 // ════════════════════════════════════════════════════════════
+// Descarga Excel de ausencias docentes: del mes que se ve en pantalla o de un rango libre
+function exportarAusenciasDocentesExcel(delMes) {
+  var desde, hasta;
+  if (delMes) {
+    var mes = APP._adMes, anio = APP._adAnio;
+    var p2 = function(n){ return (n < 10 ? "0" : "") + n; };
+    desde = anio + "-" + p2(mes + 1) + "-01";
+    hasta = anio + "-" + p2(mes + 1) + "-" + p2(new Date(anio, mes + 1, 0).getDate());
+  } else {
+    desde = document.getElementById("adXlsDesde").value;
+    hasta = document.getElementById("adXlsHasta").value;
+    if (!desde || !hasta) { toast("Completá las fechas Desde y Hasta"); return; }
+    if (desde > hasta)    { toast("La fecha Desde no puede ser posterior a Hasta"); return; }
+  }
+  toast("Generando Excel...");
+  callBackend("getReporteAusenciasDocentes", {desde: desde, hasta: hasta}, function(res) {
+    if (!res.ok) { toast("❌ " + (res.error || "Error al obtener datos")); return; }
+    if (!res.data || res.data.length === 0) { toast("Sin ausencias en ese período"); return; }
+    var porDocente = {};
+    res.data.forEach(function(a) {
+      if (!porDocente[a.docente_nombre]) porDocente[a.docente_nombre] = [];
+      porDocente[a.docente_nombre].push(a);
+    });
+    window._lastReporteDoc = {data: res.data, porDocente: porDocente, desde: desde, hasta: hasta};
+    exportarReporteDocentesExcel();
+  });
+}
+
 function renderAusenciasDocentes() {
   var hoy  = new Date();
   var mes  = hoy.getMonth();
@@ -4421,6 +4451,14 @@ function renderAusenciasDocentes() {
         '<span id="adMesLabel" style="font-weight:600;font-size:15px;min-width:160px;text-align:center"></span>' +
         '<button class="btn btn-outline" style="padding:4px 12px" onclick="cambiarMesAusencias(1)">▶</button>' +
         '<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="irMesActualAusencias()">Hoy</button>' +
+      '</div>' +
+      // Exportar a Excel (mes mostrado o rango de fechas)
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;background:#f5f7fa;border-radius:8px">' +
+        '<span style="font-size:13px;font-weight:600">📊 Excel:</span>' +
+        '<label style="font-size:12px">Desde <input id="adXlsDesde" type="date" class="form-control" style="display:inline-block;width:auto;padding:4px 8px"></label>' +
+        '<label style="font-size:12px">Hasta <input id="adXlsHasta" type="date" class="form-control" style="display:inline-block;width:auto;padding:4px 8px"></label>' +
+        '<button class="btn btn-success" style="padding:5px 12px;font-size:13px" onclick="exportarAusenciasDocentesExcel(false)">⬇️ Descargar rango</button>' +
+        '<button class="btn btn-outline" style="padding:5px 12px;font-size:13px" onclick="exportarAusenciasDocentesExcel(true)">⬇️ Mes mostrado</button>' +
       '</div>' +
       '<div id="adCalendario" style="margin-bottom:20px"></div>' +
       '<div class="card-title" style="font-size:13px;margin-bottom:8px">📋 Listado del mes</div>' +
@@ -5505,27 +5543,52 @@ function mostrarError(msg) {
 // ════════════════════════════════════════════════════════════
 function callBackend(accion, data, callback) {
   var token = APP.usuario ? APP.usuario.email : "";
-  
-  // Construir URL con parámetros GET (evita CORS con Apps Script)
   var params = Object.assign({}, data, {accion: accion, token: token});
+
   var qs = Object.keys(params).map(function(k) {
     var val = params[k];
     if (typeof val === "object") val = JSON.stringify(val);
     return encodeURIComponent(k) + "=" + encodeURIComponent(val || "");
   }).join("&");
-  
-  var url = BACKEND_URL + "?" + qs;
-  
-  fetch(url, { method: "GET", redirect: "follow" })
+
+  // Si la URL es larga (ej: guardar muchas calificaciones) se manda por POST.
+  // Las URLs muy largas hacen que fetch falle y termine en "Timeout".
+  var esLargo = qs.length > 1500;
+  var url, opts;
+  if (esLargo) {
+    url  = BACKEND_URL;
+    opts = {
+      method: "POST",
+      redirect: "follow",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},  // evita preflight CORS
+      body: JSON.stringify(params)
+    };
+  } else {
+    url  = BACKEND_URL + "?" + qs;
+    opts = {method: "GET", redirect: "follow"};
+  }
+
+  var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  if (ctrl) opts.signal = ctrl.signal;
+  var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, esLargo ? 120000 : 60000);
+
+  fetch(url, opts)
   .then(function(r) { return r.json(); })
-  .then(function(json) { callback(json); })
-  .catch(function(err) {
-    // Fallback JSONP
+  .then(function(json) {
+    clearTimeout(timer);
+    callback(json);
+  }, function(err) {
+    clearTimeout(timer);
+    if (esLargo) {
+      callback({ok: false, error: "No se pudo conectar con el servidor (" + (err && err.message || err) + "). Reintentá."});
+      return;
+    }
+    // Fallback JSONP (solo para pedidos cortos)
     var cb = "cb_" + Date.now();
     window[cb] = function(json) { delete window[cb]; callback(json); };
-    var s = document.createElement("script");
-    s.src = url + "&callback=" + cb;
-    document.head.appendChild(s);
+    var sc = document.createElement("script");
+    sc.src = url + "&callback=" + cb;
+    document.head.appendChild(sc);
     setTimeout(function() {
       if (window[cb]) {
         delete window[cb];
